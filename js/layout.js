@@ -157,12 +157,15 @@ function updateChecklistNavBadge() {
 // Initialize an app page (called from each HTML page)
 function initPage(viewName) {
   load();
+  console.log('[initPage:' + viewName + '] projects loaded:', state.projects.length, '| localStorage has:', (localStorage.getItem('netrack_data')||'null').substring(0,80));
   // Restore current project from localStorage
   const savedProject = localStorage.getItem('netrack_current_project');
   if (savedProject && !state.currentProjectId) {
     state.currentProjectId = savedProject;
   }
+  console.log('[initPage:' + viewName + '] currentProjectId:', state.currentProjectId, '| getProject():', !!getProject());
   if (!getProject()) {
+    console.warn('[initPage:' + viewName + '] project not found, redirecting to index.html');
     window.location.href = 'index.html';
     return;
   }
