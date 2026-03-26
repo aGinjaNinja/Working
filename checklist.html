@@ -29,8 +29,10 @@
 <script src="js/layout.js"></script>
 <script src="js/checklist.js"></script>
 <script>
-  initPage('checklist');
-  renderChecklist();
+  (async () => {
+    await initPage('checklist');
+    renderChecklist();
+  })();
 </script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </body>

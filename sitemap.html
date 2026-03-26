@@ -30,8 +30,10 @@
 <script src="js/layout.js"></script>
 <script src="js/sitemap.js"></script>
 <script>
-  initPage('sitemap');
-  renderSiteMap();
+  (async () => {
+    await initPage('sitemap');
+    renderSiteMap();
+  })();
 </script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </body>

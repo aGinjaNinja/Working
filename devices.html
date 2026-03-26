@@ -32,8 +32,10 @@
 <script src="js/devices.js"></script>
 <script src="js/scan.js"></script>
 <script>
-  initPage('devices');
-  renderDevices();
+  (async () => {
+    await initPage('devices');
+    renderDevices();
+  })();
 </script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </body>

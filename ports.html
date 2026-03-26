@@ -31,8 +31,10 @@
 <script src="js/ports.js"></script>
 <script src="js/print.js"></script>
 <script>
-  initPage('ports');
-  renderPorts();
+  (async () => {
+    await initPage('ports');
+    renderPorts();
+  })();
 </script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </body>

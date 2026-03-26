@@ -33,8 +33,10 @@
 <script src="js/dashboard.js"></script>
 <script src="js/print.js"></script>
 <script>
-  initPage('dashboard');
-  renderDashboard();
+  (async () => {
+    await initPage('dashboard');
+    renderDashboard();
+  })();
 </script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </body>

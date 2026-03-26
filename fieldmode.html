@@ -30,8 +30,10 @@
 <script src="js/devices.js"></script>
 <script src="js/fieldmode.js"></script>
 <script>
-  initPage('fieldmode');
-  renderFieldMode();
+  (async () => {
+    await initPage('fieldmode');
+    renderFieldMode();
+  })();
 </script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </body>

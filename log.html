@@ -29,8 +29,10 @@
 <script src="js/layout.js"></script>
 <script src="js/log.js"></script>
 <script>
-  initPage('log');
-  renderLog();
+  (async () => {
+    await initPage('log');
+    renderLog();
+  })();
 </script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </body>

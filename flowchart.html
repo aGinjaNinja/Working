@@ -30,8 +30,10 @@
 <script src="js/devices.js"></script>
 <script src="js/flowchart.js"></script>
 <script>
-  initPage('flowchart');
-  renderFlowchart();
+  (async () => {
+    await initPage('flowchart');
+    renderFlowchart();
+  })();
 </script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </body>

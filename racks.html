@@ -32,9 +32,11 @@
 <script src="js/racks.js"></script>
 <script src="js/ports.js"></script>
 <script>
-  initPage('racks');
-  renderRacks();
-  checkFocusRack();
+  (async () => {
+    await initPage('racks');
+    renderRacks();
+    checkFocusRack();
+  })();
 </script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </body>

@@ -29,8 +29,10 @@
 <script src="js/layout.js"></script>
 <script src="js/cableruns.js"></script>
 <script>
-  initPage('cableruns');
-  renderCableRuns();
+  (async () => {
+    await initPage('cableruns');
+    renderCableRuns();
+  })();
 </script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
 </body>
