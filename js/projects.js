@@ -87,4 +87,3 @@ function openProject(id) {
   localStorage.setItem('netrack_current_project', id);
   window.location.href = 'dashboard.html';
 }
-}
