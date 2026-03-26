@@ -126,7 +126,7 @@ async function gdriveLoad() {
       openModal(`
         <h3>☁ Load from Google Drive</h3>
         <p style="font-size:13px;color:var(--text2);margin-bottom:14px">
-          Select a project file to import, or load all at once. Your existing local projects are not affected.
+          Click a project to download &amp; open it, or add all to your dashboard.
         </p>
         <div style="display:flex;flex-direction:column;gap:6px;max-height:52vh;overflow-y:auto">
           ${files.map(f => {
@@ -146,7 +146,7 @@ async function gdriveLoad() {
         </div>
         <div class="modal-actions">
           <button class="btn btn-ghost btn-sm" onclick="closeModal()">Cancel</button>
-          <button class="btn btn-primary btn-sm" onclick="gdriveImportAll()">☁ Load All (${files.length})</button>
+          <button class="btn btn-primary btn-sm" onclick="gdriveAddAllToDashboard()">☁ Add All to Dashboard (${files.length})</button>
         </div>
       `, '500px');
     } catch (err) { toast('Drive load failed: ' + err.message, 'error'); }
@@ -155,41 +155,62 @@ async function gdriveLoad() {
 
 let _gdrivePendingFiles = [];
 
-async function gdriveImportAll() {
+// Saves metadata only — no project data downloaded. Cards appear on the dashboard.
+async function gdriveAddAllToDashboard() {
   const files = _gdrivePendingFiles;
   if (!files?.length) return;
-  closeModal();
-  toast(`☁ Loading ${files.length} project${files.length!==1?'s':''} from Google Drive…`);
-  let loaded = 0, skipped = 0, failed = 0;
-  for (const f of files) {
-    try {
-      const r = await _driveFetch(`https://www.googleapis.com/drive/v3/files/${f.id}?alt=media`);
-      const text = await r.text();
-      let p = null, importedColors = null;
-      const parsed = JSON.parse(text);
-      if (parsed._netrack_version === 2 && parsed.project) {
-        p = parsed.project; importedColors = parsed.typeColors;
-      } else if (parsed.id && parsed.name) {
-        p = parsed;
-      } else { failed++; continue; }
-      if (!p.id || !p.name) { failed++; continue; }
-      migrateProject(p);
-      await _idbSaveProject(p);
-      const existing = state.projects.findIndex(x => x.id === p.id);
-      if (existing >= 0) {
-        state.projects[existing] = p;
-      } else {
-        state.projects.push(p);
-      }
-      if (importedColors) state.typeColors = Object.assign({}, importedColors, state.typeColors);
-      loaded++;
-    } catch (err) { failed++; }
+  const index = files.map(f => ({
+    driveFileId: f.id,
+    name: f.name.replace(/_netrack\.json$/, '').replace(/_/g, ' '),
+    fileName: f.name,
+    modifiedTime: f.modifiedTime,
+    size: f.size
+  }));
+  // Merge with existing drive index
+  const merged = [...state.driveIndex];
+  for (const entry of index) {
+    const idx = merged.findIndex(e => e.driveFileId === entry.driveFileId);
+    if (idx >= 0) merged[idx] = entry; else merged.push(entry);
   }
-  save();
+  state.driveIndex = merged;
+  await _idbSaveConfig('driveIndex', merged);
+  closeModal();
   renderProjects();
-  const parts = [`${loaded} loaded`];
-  if (failed) parts.push(`${failed} failed`);
-  toast(`☁ ${parts.join(', ')}`, loaded > 0 ? 'success' : 'error');
+  toast(`☁ ${files.length} project${files.length !== 1 ? 's' : ''} added — click one to download`, 'success');
+}
+
+// Downloads one project from Drive, saves to IDB, and opens it
+async function openDriveProject(driveFileId) {
+  if (!_driveToken) {
+    _driveAuth(() => openDriveProject(driveFileId));
+    return;
+  }
+  try {
+    toast('☁ Downloading project…');
+    const r = await _driveFetch(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`);
+    const text = await r.text();
+    let p = null, importedColors = null;
+    const parsed = JSON.parse(text);
+    if (parsed._netrack_version === 2 && parsed.project) {
+      p = parsed.project; importedColors = parsed.typeColors;
+    } else if (parsed.id && parsed.name) {
+      p = parsed;
+    } else { throw new Error('Unrecognised file format'); }
+    if (!p.id || !p.name) throw new Error('Missing project id or name');
+    migrateProject(p);
+    await _idbSaveProject(p);
+    const existing = state.projects.findIndex(x => x.id === p.id);
+    if (existing >= 0) { state.projects[existing] = p; }
+    else { state.projects.push(p); }
+    if (importedColors) {
+      state.typeColors = Object.assign({}, importedColors, state.typeColors);
+      _idbSaveConfig('typeColors', state.typeColors).catch(() => {});
+    }
+    // Remove from drive index — it's now a local project
+    state.driveIndex = state.driveIndex.filter(e => e.driveFileId !== driveFileId);
+    _idbSaveConfig('driveIndex', state.driveIndex).catch(() => {});
+    openProject(p.id);
+  } catch (err) { toast('Failed to load: ' + err.message, 'error'); }
 }
 
 async function gdriveImportFile(fileId, fileName) {

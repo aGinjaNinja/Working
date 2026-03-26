@@ -1,6 +1,8 @@
 function renderProjects() {
   const g = document.getElementById('proj-grid');
   g.innerHTML = '';
+
+  // Local projects (full data in IDB)
   state.projects.forEach(p => {
     const devCount = p.devices.length;
     const rackCount = p.racks.length;
@@ -15,6 +17,24 @@ function renderProjects() {
     div.addEventListener('click', () => openProject(p.id));
     g.appendChild(div);
   });
+
+  // Drive-only projects (metadata stubs — no data downloaded yet)
+  const localNames = new Set(state.projects.map(p => p.name));
+  const driveOnly = (state.driveIndex || []).filter(d => !localNames.has(d.name));
+  driveOnly.forEach(d => {
+    const div = document.createElement('div');
+    div.className = 'proj-card';
+    div.style.borderColor = 'rgba(66,133,244,.3)';
+    div.innerHTML = `
+      <div style="position:absolute;top:8px;right:8px;font-size:10px;color:#4285f4;font-family:var(--mono);background:rgba(66,133,244,.1);border:1px solid rgba(66,133,244,.3);border-radius:4px;padding:1px 6px">☁ Drive</div>
+      <div class="pname">${esc(d.name)}</div>
+      <div class="pmeta" style="color:#4285f4">Click to download &amp; open</div>
+      <div class="pmeta" style="margin-top:4px;color:var(--text3);font-size:10px">${d.modifiedTime ? new Date(d.modifiedTime).toLocaleDateString() : ''}${d.size ? ' &middot; ' + (d.size/1024).toFixed(0) + ' KB' : ''}</div>
+    `;
+    div.addEventListener('click', () => openDriveProject(d.driveFileId));
+    g.appendChild(div);
+  });
+
   const np = document.createElement('div');
   np.className = 'proj-new';
   np.innerHTML = `<span style="font-size:20px;color:var(--accent)">+</span> New Project`;

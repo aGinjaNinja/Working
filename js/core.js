@@ -102,7 +102,8 @@ let state = {
   activeTimer: null,
   deviceStatusFilter: 'all',
   cableTypeFilter: 'all',
-  cableRoomFilter: ''
+  cableRoomFilter: '',
+  driveIndex: []
 };
 
 function migrateProject(p) {
@@ -392,6 +393,8 @@ async function load() {
   } catch(e) {
     try { const c = localStorage.getItem('netrack_colors'); if (c) state.typeColors = JSON.parse(c); } catch(e2) {}
   }
+  // Load Drive project index (lightweight metadata)
+  try { state.driveIndex = (await _idbGetConfig('driveIndex')) || []; } catch(e) {}
 }
 
 function getProject() {
