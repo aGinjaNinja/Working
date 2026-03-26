@@ -41,6 +41,7 @@
 <script src="js/projects.js"></script>
 <script>
 load();
+console.log('[index.html] after load(): projects in state:', state.projects.length, '| localStorage netrack_data:', localStorage.getItem('netrack_data') ? localStorage.getItem('netrack_data').length + ' chars' : 'NULL');
 renderProjects();
 updateBackupStatusBadge();
 // Set logo
