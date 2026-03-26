@@ -193,21 +193,88 @@ function genId() {
   return 'id_' + Math.random().toString(36).substr(2, 9);
 }
 
+// ─── IndexedDB Storage (primary — replaces localStorage, effectively unlimited) ───
+let _idbInstance = null;
+
+function _idbOpen() {
+  if (_idbInstance) return Promise.resolve(_idbInstance);
+  return new Promise((res, rej) => {
+    const req = indexedDB.open('netrack_projects', 1);
+    req.onupgradeneeded = e => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains('projects')) db.createObjectStore('projects', { keyPath: 'id' });
+      if (!db.objectStoreNames.contains('config')) db.createObjectStore('config');
+    };
+    req.onsuccess = e => { _idbInstance = e.target.result; res(_idbInstance); };
+    req.onerror = () => rej(req.error);
+  });
+}
+
+async function _idbSaveProject(project) {
+  const db = await _idbOpen();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('projects', 'readwrite');
+    tx.objectStore('projects').put(project);
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
+}
+
+async function _idbDeleteProject(id) {
+  const db = await _idbOpen();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('projects', 'readwrite');
+    tx.objectStore('projects').delete(id);
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
+}
+
+async function _idbLoadAllProjects() {
+  const db = await _idbOpen();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('projects', 'readonly');
+    const req = tx.objectStore('projects').getAll();
+    req.onsuccess = () => res(req.result || []);
+    req.onerror = () => rej(req.error);
+  });
+}
+
+async function _idbSaveConfig(key, value) {
+  const db = await _idbOpen();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('config', 'readwrite');
+    tx.objectStore('config').put(value, key);
+    tx.oncomplete = () => res();
+    tx.onerror = () => rej(tx.error);
+  });
+}
+
+async function _idbGetConfig(key) {
+  const db = await _idbOpen();
+  return new Promise((res, rej) => {
+    const tx = db.transaction('config', 'readonly');
+    const req = tx.objectStore('config').get(key);
+    req.onsuccess = () => res(req.result);
+    req.onerror = () => rej(req.error);
+  });
+}
+
 // ─── Persistence ───
 let _autoBackupTimer = null;
 
 function save() {
+  // Primary: fire-and-forget async write to IndexedDB (large quota)
+  Promise.all(state.projects.map(p => _idbSaveProject(p)))
+    .catch(e => console.warn('IDB save error:', e));
+  _idbSaveConfig('typeColors', state.typeColors).catch(() => {});
+
+  // Secondary: try localStorage as a quick fallback (may fail if full)
   try {
-    const data = JSON.stringify(state.projects);
-    localStorage.setItem('netrack_data', data);
+    localStorage.setItem('netrack_data', JSON.stringify(state.projects));
     localStorage.setItem('netrack_colors', JSON.stringify(state.typeColors));
-    // Also persist to sessionStorage as navigation fallback
-    try { sessionStorage.setItem('netrack_data', data); } catch(e2) {}
-  } catch(e) {
-    toast('⚠ Storage full — data may not persist across pages. Export your project to save it.', 'warning');
-    // Still try sessionStorage so page navigation doesn't lose data
-    try { sessionStorage.setItem('netrack_data', JSON.stringify(state.projects)); } catch(e2) {}
-  }
+  } catch(e) { /* Quota exceeded — IDB is primary now, this is fine */ }
+
   // Debounced autosave to ./Projects/ via local agent — fires 1.5s after last change
   clearTimeout(_autoBackupTimer);
   _autoBackupTimer = setTimeout(() => {
@@ -291,19 +358,40 @@ function globalSave() {
   toast('Project exported', 'success');
 }
 
-function load() {
+async function load() {
   try {
-    // Try localStorage first, fall back to sessionStorage (covers quota-exceeded scenarios)
-    const d = localStorage.getItem('netrack_data') || sessionStorage.getItem('netrack_data');
-    if (d) {
-      state.projects = JSON.parse(d);
+    // Primary: load from IndexedDB (large quota)
+    const projects = await _idbLoadAllProjects();
+    if (projects.length > 0) {
+      state.projects = projects;
       state.projects.forEach(migrateProject);
+    } else {
+      // Fall back to localStorage (first run or migration)
+      const d = localStorage.getItem('netrack_data');
+      if (d) {
+        state.projects = JSON.parse(d);
+        state.projects.forEach(migrateProject);
+        // Migrate existing data to IndexedDB
+        Promise.all(state.projects.map(p => _idbSaveProject(p))).catch(() => {});
+      }
     }
-  } catch(e) {}
+  } catch(e) {
+    // IDB failed entirely — fall back to localStorage
+    try {
+      const d = localStorage.getItem('netrack_data');
+      if (d) { state.projects = JSON.parse(d); state.projects.forEach(migrateProject); }
+    } catch(e2) {}
+  }
   try {
-    const c = localStorage.getItem('netrack_colors');
-    if (c) state.typeColors = JSON.parse(c);
-  } catch(e) {}
+    const colors = await _idbGetConfig('typeColors');
+    if (colors) { state.typeColors = colors; }
+    else {
+      const c = localStorage.getItem('netrack_colors');
+      if (c) state.typeColors = JSON.parse(c);
+    }
+  } catch(e) {
+    try { const c = localStorage.getItem('netrack_colors'); if (c) state.typeColors = JSON.parse(c); } catch(e2) {}
+  }
 }
 
 function getProject() {

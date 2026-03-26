@@ -174,6 +174,7 @@ async function gdriveImportAll() {
       } else { failed++; continue; }
       if (!p.id || !p.name) { failed++; continue; }
       migrateProject(p);
+      await _idbSaveProject(p);
       const existing = state.projects.findIndex(x => x.id === p.id);
       if (existing >= 0) {
         state.projects[existing] = p;
@@ -193,6 +194,7 @@ async function gdriveImportAll() {
 
 async function gdriveImportFile(fileId, fileName) {
   try {
+    toast('☁ Downloading project…');
     const r = await _driveFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
     const text = await r.text();
     let p = null, importedColors = null;
@@ -204,17 +206,19 @@ async function gdriveImportFile(fileId, fileName) {
     } else { throw new Error('Unrecognised file format'); }
     if (!p.id || !p.name) throw new Error('Missing project id or name');
     migrateProject(p);
+    // Save directly to IndexedDB (no localStorage quota issues)
+    await _idbSaveProject(p);
+    // Update in-memory state
     const existing = state.projects.findIndex(x => x.id === p.id);
-    if (existing >= 0) {
-      if (!confirm(`"${p.name}" already exists locally. Overwrite it?`)) return;
-      state.projects[existing] = p;
-    } else {
-      state.projects.push(p);
+    if (existing >= 0) { state.projects[existing] = p; }
+    else { state.projects.push(p); }
+    if (importedColors) {
+      state.typeColors = Object.assign({}, importedColors, state.typeColors);
+      _idbSaveConfig('typeColors', state.typeColors).catch(() => {});
     }
-    if (importedColors) state.typeColors = Object.assign({}, importedColors, state.typeColors);
     save();
     closeModal();
-    renderProjects();
-    toast(`☁ Loaded "${p.name}" from Google Drive`, 'success');
+    // Open the project directly instead of going back to the grid
+    openProject(p.id);
   } catch (err) { toast('Failed to load file: ' + err.message, 'error'); }
 }

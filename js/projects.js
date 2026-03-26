@@ -76,6 +76,7 @@ function confirmDeleteProject(id) {
   const typed = document.getElementById('del-confirm-name')?.value?.trim();
   if (typed !== p.name) return toast('Project name does not match', 'error');
   state.projects = state.projects.filter(x => x.id !== id);
+  _idbDeleteProject(id).catch(() => {});
   save();
   closeModal();
   renderProjects();
@@ -83,21 +84,6 @@ function confirmDeleteProject(id) {
 }
 
 function openProject(id) {
-  // Verify data is in localStorage before navigating
-  const stored = localStorage.getItem('netrack_data');
-  const projCount = stored ? JSON.parse(stored).length : 0;
-  console.log('[openProject] projects in memory:', state.projects.length, '| in localStorage:', projCount, '| opening id:', id);
-  if (projCount === 0 && state.projects.length > 0) {
-    // localStorage is empty but we have projects in memory — force save before navigating
-    console.warn('[openProject] localStorage empty, forcing save...');
-    try {
-      localStorage.setItem('netrack_data', JSON.stringify(state.projects));
-      localStorage.setItem('netrack_colors', JSON.stringify(state.typeColors || {}));
-    } catch(e) {
-      alert('Storage full — cannot save projects. Export your data to avoid losing it.');
-      return;
-    }
-  }
   state.currentProjectId = id;
   localStorage.setItem('netrack_current_project', id);
   window.location.href = 'dashboard.html';
