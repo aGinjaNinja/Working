@@ -106,6 +106,7 @@ function confirmDeleteProject(id) {
 
 function openProject(id) {
   state.currentProjectId = id;
-  localStorage.setItem('netrack_current_project', id);
+  sessionStorage.setItem('netrack_current_project', id);
+  try { localStorage.setItem('netrack_current_project', id); } catch(e) {}
   window.location.href = 'dashboard.html';
 }

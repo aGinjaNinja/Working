@@ -25,6 +25,7 @@ function setView(v) {
 
 function backToProjects() {
   state.currentProjectId = null;
+  sessionStorage.removeItem('netrack_current_project');
   localStorage.removeItem('netrack_current_project');
   window.location.href = 'index.html';
 }
@@ -157,8 +158,11 @@ function updateChecklistNavBadge() {
 // Initialize an app page (called from each HTML page)
 async function initPage(viewName) {
   await load();
-  // Restore current project from localStorage
-  const savedProject = localStorage.getItem('netrack_current_project');
+  // Restore current project — sessionStorage is primary (immune to quota),
+  // localStorage is fallback for tab-restore / bookmarks
+  const ssProject = sessionStorage.getItem('netrack_current_project');
+  const lsProject = localStorage.getItem('netrack_current_project');
+  const savedProject = ssProject || lsProject;
   if (savedProject && !state.currentProjectId) {
     state.currentProjectId = savedProject;
   }

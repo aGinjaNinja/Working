@@ -120,63 +120,126 @@ function setPhotoFolder(folderId) {
   renderPhotos();
 }
 
+function _getPhotoFolderLocations() {
+  const p = getProject();
+  const locs = new Map();
+  // Locations from the location hierarchy
+  (p.locations || []).forEach(l => locs.set(l.name, l.name));
+  // Unique rack locations
+  (p.racks || []).forEach(r => { if (r.location) locs.set(r.location, r.location); });
+  return Array.from(locs.values()).sort((a, b) => a.localeCompare(b));
+}
+
 function createPhotoFolder() {
+  const locations = _getPhotoFolderLocations();
+  const locOptions = locations.map(l => `<option value="${esc(l)}">${esc(l)}</option>`).join('');
   openModal(`
     <h3>📁 New Photo Folder</h3>
     <div class="form-row">
+      <label>Location</label>
+      <select class="form-control" id="pf-location">
+        <option value="">— None —</option>
+        ${locOptions}
+      </select>
+    </div>
+    <div class="form-row">
       <label>Folder Name *</label>
-      <input class="form-control" id="pf-name" placeholder="e.g. MDF Room, IDF 166, Server Room" autofocus>
+      <input class="form-control" id="pf-name" placeholder="e.g. Cable Tray, Before Photos, Patch Panel" autofocus>
+    </div>
+    <div style="margin:8px 0 4px;padding:8px 10px;background:var(--card2);border:1px solid var(--border);border-radius:5px;font-size:12px;color:var(--text2)">
+      Preview: <span id="pf-preview" style="color:var(--text);font-weight:600">—</span>
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" onclick="savePhotoFolder()">Create Folder</button>
     </div>
   `);
-  setTimeout(() => document.getElementById('pf-name')?.focus(), 50);
+  const updatePreview = () => {
+    const loc = document.getElementById('pf-location')?.value || '';
+    const name = document.getElementById('pf-name')?.value?.trim() || '';
+    const el = document.getElementById('pf-preview');
+    if (el) el.textContent = loc && name ? loc + ' - ' + name : name || loc || '—';
+  };
+  setTimeout(() => {
+    document.getElementById('pf-name')?.focus();
+    document.getElementById('pf-location')?.addEventListener('change', updatePreview);
+    document.getElementById('pf-name')?.addEventListener('input', updatePreview);
+  }, 50);
 }
 
 function savePhotoFolder() {
+  const location = document.getElementById('pf-location')?.value || '';
   const name = document.getElementById('pf-name')?.value?.trim();
   if (!name) return toast('Enter a folder name', 'error');
+  const displayName = location ? location + ' - ' + name : name;
   const p = getProject();
   if (!p.photoFolders) p.photoFolders = [];
-  const folder = { id: genId(), name };
+  const folder = { id: genId(), name: displayName, location, folderName: name };
   p.photoFolders.push(folder);
-  logChange(`Photo folder created: "${name}"`);
+  logChange(`Photo folder created: "${displayName}"`);
   save();
   closeModal();
   _currentPhotoFolderId = folder.id;
   renderPhotos();
-  toast(`Folder "${name}" created`, 'success');
+  toast(`Folder "${displayName}" created`, 'success');
 }
 
 function renamePhotoFolder(id) {
   const p = getProject();
   const folder = p.photoFolders?.find(f => f.id === id);
   if (!folder) return;
+  const locations = _getPhotoFolderLocations();
+  const curLoc = folder.location || '';
+  const curName = folder.folderName || folder.name || '';
+  const locOptions = locations.map(l => `<option value="${esc(l)}" ${l === curLoc ? 'selected' : ''}>${esc(l)}</option>`).join('');
   openModal(`
     <h3>Rename Folder</h3>
     <div class="form-row">
+      <label>Location</label>
+      <select class="form-control" id="pfr-location">
+        <option value="" ${!curLoc ? 'selected' : ''}>— None —</option>
+        ${locOptions}
+      </select>
+    </div>
+    <div class="form-row">
       <label>Folder Name *</label>
-      <input class="form-control" id="pfr-name" value="${esc(folder.name)}" autofocus>
+      <input class="form-control" id="pfr-name" value="${esc(curName)}" autofocus>
+    </div>
+    <div style="margin:8px 0 4px;padding:8px 10px;background:var(--card2);border:1px solid var(--border);border-radius:5px;font-size:12px;color:var(--text2)">
+      Preview: <span id="pfr-preview" style="color:var(--text);font-weight:600">—</span>
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" onclick="saveRenameFolder('${id}')">Save</button>
     </div>
   `);
-  setTimeout(() => document.getElementById('pfr-name')?.focus(), 50);
+  const updatePreview = () => {
+    const loc = document.getElementById('pfr-location')?.value || '';
+    const name = document.getElementById('pfr-name')?.value?.trim() || '';
+    const el = document.getElementById('pfr-preview');
+    if (el) el.textContent = loc && name ? loc + ' - ' + name : name || loc || '—';
+  };
+  setTimeout(() => {
+    document.getElementById('pfr-name')?.focus();
+    document.getElementById('pfr-location')?.addEventListener('change', updatePreview);
+    document.getElementById('pfr-name')?.addEventListener('input', updatePreview);
+    updatePreview();
+  }, 50);
 }
 
 function saveRenameFolder(id) {
+  const location = document.getElementById('pfr-location')?.value || '';
   const name = document.getElementById('pfr-name')?.value?.trim();
   if (!name) return toast('Enter a folder name', 'error');
+  const displayName = location ? location + ' - ' + name : name;
   const p = getProject();
   const folder = p.photoFolders?.find(f => f.id === id);
   if (!folder) return;
   const old = folder.name;
-  folder.name = name;
-  logChange(`Photo folder renamed: "${old}" → "${name}"`);
+  folder.name = displayName;
+  folder.location = location;
+  folder.folderName = name;
+  logChange(`Photo folder renamed: "${old}" → "${displayName}"`);
   save();
   closeModal();
   renderPhotos();

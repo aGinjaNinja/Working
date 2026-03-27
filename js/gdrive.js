@@ -246,7 +246,8 @@ async function openDriveProject(driveFileId) {
     state.driveIndex = state.driveIndex.filter(e => e.driveFileId !== driveFileId);
     _idbSaveConfig('driveIndex', state.driveIndex).catch(() => {});
     state.currentProjectId = p.id;
-    localStorage.setItem('netrack_current_project', p.id);
+    sessionStorage.setItem('netrack_current_project', p.id);
+    try { localStorage.setItem('netrack_current_project', p.id); } catch(e) {}
     window.location.href = 'dashboard.html';
   } catch (err) { toast('Failed to load: ' + err.message, 'error'); }
 }
@@ -277,9 +278,9 @@ async function gdriveImportFile(fileId, fileName) {
     }
     save();
     closeModal();
-    // Open the project — openProject() is only on index.html, so fall back to direct nav
     state.currentProjectId = p.id;
-    localStorage.setItem('netrack_current_project', p.id);
+    sessionStorage.setItem('netrack_current_project', p.id);
+    try { localStorage.setItem('netrack_current_project', p.id); } catch(e) {}
     window.location.href = 'dashboard.html';
   } catch (err) { toast('Failed to load file: ' + err.message, 'error'); }
 }

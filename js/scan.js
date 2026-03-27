@@ -250,7 +250,7 @@ function generateSampleDevices() {
 
 // ─── QUICK DEVICE TEMPLATES ───
 let _quickTpl = null;
-let _tplPanelOpen = true;
+let _tplPanelOpen = false;
 let _tplOpenCat = null;
 
 const DEVICE_TEMPLATES = [
@@ -326,7 +326,6 @@ function _flatTemplates() {
 function buildTemplatePanel() {
   const allTpls = _getAllTemplates();
   let fi = 0;
-  // Build category buttons (always visible)
   const catBtns = allTpls.map((cat, ci) => {
     const isOpen = _tplOpenCat === ci;
     let itemsHtml = '';
@@ -349,13 +348,24 @@ function buildTemplatePanel() {
     </div>`;
   }).join('');
 
+  const inner = `${catBtns}
+    <button class="template-btn" style="margin-top:8px;text-align:center;color:var(--accent);border-color:var(--accent);border-style:dashed" onclick="openBuildTemplate()">+ Build a Template</button>`;
+
   return `<div class="template-panel">
-    <div class="template-panel-hdr">
+    <div class="template-panel-hdr" onclick="toggleTplPanel()" style="cursor:pointer;user-select:none">
       <span>⚡ Quick Templates</span>
+      <span id="tpl-panel-arrow" style="font-size:9px">${_tplPanelOpen ? '▲' : '▼'}</span>
     </div>
-    ${catBtns}
-    <button class="template-btn" style="margin-top:8px;text-align:center;color:var(--accent);border-color:var(--accent);border-style:dashed" onclick="openBuildTemplate()">+ Build a Template</button>
+    <div id="tpl-panel-body" style="display:${_tplPanelOpen ? 'block' : 'none'}">${inner}</div>
   </div>`;
+}
+
+function toggleTplPanel() {
+  _tplPanelOpen = !_tplPanelOpen;
+  const body = document.getElementById('tpl-panel-body');
+  const arrow = document.getElementById('tpl-panel-arrow');
+  if (body) body.style.display = _tplPanelOpen ? 'block' : 'none';
+  if (arrow) arrow.textContent = _tplPanelOpen ? '▲' : '▼';
 }
 
 function toggleTplCat(catIndex) {
