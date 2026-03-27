@@ -35,6 +35,8 @@
   (async () => {
     await initPage('devices');
     renderDevices();
+    const editId = sessionStorage.getItem('netrack_edit_device');
+    if (editId) { sessionStorage.removeItem('netrack_edit_device'); setTimeout(() => editDevice(editId), 100); }
   })();
 </script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
