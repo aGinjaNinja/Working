@@ -117,6 +117,7 @@ function migrateProject(p) {
   if (!p.contactMgmt) p.contactMgmt = '';
   if (!p.contactIT) p.contactIT = '';
   if (!p.fcNodePositions) p.fcNodePositions = {};
+  if (!p.photos) p.photos = [];
   if (!p.photoFolders) p.photoFolders = [];
   // Feature 5: Vendors
   if (!p.vendors) p.vendors = [];

@@ -508,7 +508,7 @@ function smMarkerClick(id) {
     <div style="font-size:12px;color:var(--text2);margin-bottom:12px">Type: ${esc(m.type||'')} ${rack?'· Rack: '+esc(rack.name):''} · Size: ${Math.round((m.size||1)*100)}%</div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Close</button>
-      ${rack?`<button class="btn btn-ghost" onclick="closeModal();viewRackFromDash('${rack.id}')">View Rack →</button>`:''}
+      ${rack?`<button class="btn btn-ghost" onclick="closeModal();sessionStorage.setItem('netrack_focus_rack','${rack.id}');setView('racks')">View Rack →</button>`:''}
       ${_smEditMode?`<button class="btn btn-primary" onclick="closeModal();openSmMarkerModal('${id}','${m.x}','${m.y}')">Edit</button>`:''}
     </div>`);
 }

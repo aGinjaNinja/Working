@@ -65,6 +65,7 @@ function createProject() {
     devices: [], racks: [], changelog: [], siteNotes: [],
     flowchart: JSON.parse(JSON.stringify(DEFAULT_FLOWCHART)),
     fcNodePositions: {},
+    photos: [], photoFolders: [],
     vendors: [], checklist: getDefaultChecklist(), timeLog: [],
     cableRuns: [], locations: [], siteMap: { data: null, markers: [], cableLines: [] }
   };

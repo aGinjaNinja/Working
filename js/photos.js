@@ -541,7 +541,11 @@ function _photoTagLongPress(itemId) {
   const kind = itemId.slice(0, colonIdx);
   const id   = itemId.slice(colonIdx + 1);
   if (kind === 'note') return;
-  if (kind === 'rack') { setView('racks'); return; }
+  if (kind === 'rack') {
+    sessionStorage.setItem('netrack_focus_rack', id);
+    setView('racks');
+    return;
+  }
   if (kind === 'dev') {
     const p = getProject();
     const dev = p.devices.find(d => d.id === id);
@@ -550,8 +554,8 @@ function _photoTagLongPress(itemId) {
       state.selectedSwitch = dev.id;
       setView('ports');
     } else {
+      sessionStorage.setItem('netrack_edit_device', dev.id);
       setView('devices');
-      setTimeout(() => editDevice(dev.id), 80);
     }
   }
 }
@@ -628,7 +632,7 @@ function submitQuickRack(slotIdx) {
   const location = (document.getElementById('qrm-location')?.value || '').trim();
   const p = getProject();
   if (!p.racks) p.racks = [];
-  const newRack = { id: uid(), name, location, notes: '', devices: [] };
+  const newRack = { id: genId(), name, location, notes: '', uHeight: 42 };
   p.racks.push(newRack);
   if (!p.photos[_photoEditIdx].assignments) p.photos[_photoEditIdx].assignments = [];
   p.photos[_photoEditIdx].assignments[slotIdx] = Object.assign({}, p.photos[_photoEditIdx].assignments[slotIdx] || {}, { itemId: `rack:${newRack.id}`, x: null, y: null });
@@ -675,7 +679,14 @@ function submitQuickDevice(slotIdx) {
   const ip  = (document.getElementById('qdm-ip')?.value || '').trim();
   const mac = (document.getElementById('qdm-mac')?.value || '').trim();
   const p = getProject();
-  const newDev = { id: uid(), name, deviceType: type, ip: ip||'', mac: mac||'', model:'', location:'', notes:'', webProto:'http', webPort:'', webPath:'', parentDeviceId:'', portLabels:{}, numPorts:0, portConnections:{} };
+  const newDev = {
+    id: genId(), name, deviceType: type,
+    type: type === 'Switch' ? 'switching' : 'non-switching',
+    ip: ip||'', mac: mac||'', manufacturer: '', model: '', notes: '',
+    ports: 0, deviceUHeight: 1, rackId: null, rackU: null,
+    portAssignments: {}, portNotes: {}, portVlans: {}, portPeerPort: {}, portPoe: {}, portLabels: {},
+    webUser: '', webPassword: '', webProtocol: 'https', parentDeviceId: ''
+  };
   if (!p.devices) p.devices = [];
   p.devices.push(newDev);
   if (!p.photos[_photoEditIdx].assignments) p.photos[_photoEditIdx].assignments = [null,null,null,null];

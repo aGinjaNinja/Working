@@ -251,6 +251,7 @@ function generateSampleDevices() {
 // ─── QUICK DEVICE TEMPLATES ───
 let _quickTpl = null;
 let _tplPanelOpen = true;
+let _tplOpenCat = null;
 
 const DEVICE_TEMPLATES = [
   { category: 'Switch — Managed', icon: '⇄', items: [
@@ -311,37 +312,113 @@ const DEVICE_TEMPLATES = [
 
 const DEVICE_TEMPLATES_FLAT = DEVICE_TEMPLATES.flatMap(cat => cat.items.map(item => ({ ...item, _cat: cat.category, _icon: cat.icon })));
 
+function _getAllTemplates() {
+  const p = getProject();
+  const custom = (p && p.customTemplates) ? p.customTemplates : [];
+  if (!custom.length) return DEVICE_TEMPLATES;
+  return [{ category: 'Custom', icon: '★', items: custom }, ...DEVICE_TEMPLATES];
+}
+
+function _flatTemplates() {
+  return _getAllTemplates().flatMap(cat => cat.items.map(item => ({ ...item, _cat: cat.category, _icon: cat.icon })));
+}
+
 function buildTemplatePanel() {
+  const allTpls = _getAllTemplates();
   let fi = 0;
-  const cats = DEVICE_TEMPLATES.map(cat => {
-    const btns = cat.items.map(item => {
-      const i = fi++;
-      return `<button class="template-btn" onclick="quickAddDevice(${i})">${cat.icon} ${esc(item.label)}</button>`;
-    }).join('');
+  // Build category buttons (always visible)
+  const catBtns = allTpls.map((cat, ci) => {
+    const isOpen = _tplOpenCat === ci;
+    let itemsHtml = '';
+    if (isOpen) {
+      itemsHtml = `<div class="tpl-cat-items" style="margin-top:4px">` +
+        cat.items.map(item => {
+          const i = fi;
+          fi++;
+          return `<button class="template-btn" onclick="quickAddDevice(${i})">${cat.icon} ${esc(item.label)}</button>`;
+        }).join('') + `</div>`;
+    } else {
+      fi += cat.items.length;
+    }
     return `<div class="template-category">
-      <div class="template-cat-label">${esc(cat.category)}</div>
-      ${btns}
+      <div class="template-cat-toggle" onclick="toggleTplCat(${ci})" style="cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between;padding:5px 8px;background:var(--card);border:1px solid ${isOpen ? 'var(--accent)' : 'var(--border)'};border-radius:5px;margin-bottom:3px;transition:all .12s;color:${isOpen ? 'var(--accent)' : 'var(--text2)'};font-size:12px"
+        onmouseover="this.style.borderColor='var(--accent)';this.style.color='var(--accent)'"
+        onmouseout="this.style.borderColor='${isOpen ? 'var(--accent)' : 'var(--border)'}';this.style.color='${isOpen ? 'var(--accent)' : 'var(--text2)'}'"
+      >${cat.icon} ${esc(cat.category)} <span style="font-size:10px;color:var(--text3)">${cat.items.length}</span> <span style="font-size:9px">${isOpen ? '▲' : '▼'}</span></div>
+      ${itemsHtml}
     </div>`;
   }).join('');
+
   return `<div class="template-panel">
-    <div class="template-panel-hdr" onclick="toggleTplPanel()">
+    <div class="template-panel-hdr">
       <span>⚡ Quick Templates</span>
-      <span id="tpl-panel-arrow">${_tplPanelOpen ? '▲' : '▼'}</span>
     </div>
-    <div id="tpl-panel-body" style="display:${_tplPanelOpen ? 'block' : 'none'}">${cats}</div>
+    ${catBtns}
+    <button class="template-btn" style="margin-top:8px;text-align:center;color:var(--accent);border-color:var(--accent);border-style:dashed" onclick="openBuildTemplate()">+ Build a Template</button>
   </div>`;
 }
 
-function toggleTplPanel() {
-  _tplPanelOpen = !_tplPanelOpen;
-  const body = document.getElementById('tpl-panel-body');
-  const arrow = document.getElementById('tpl-panel-arrow');
-  if (body) body.style.display = _tplPanelOpen ? 'block' : 'none';
-  if (arrow) arrow.textContent = _tplPanelOpen ? '▲' : '▼';
+function toggleTplCat(catIndex) {
+  _tplOpenCat = (_tplOpenCat === catIndex) ? null : catIndex;
+  if (typeof renderRacks === 'function') renderRacks();
+}
+
+function openBuildTemplate() {
+  const typeOpts = DEVICE_TYPES.map(t => `<option value="${t}">${t}</option>`).join('');
+  openModal(`
+    <h3>Build a Template</h3>
+    <p style="font-size:11px;color:var(--text3);margin:-4px 0 14px;font-family:var(--mono)">Create a reusable device template for this project.</p>
+    <div class="form-row-inline">
+      <div class="form-row" style="flex:2"><label>Template Label *</label>
+        <input class="form-control" id="bt-label" placeholder="e.g. Cisco 2960 24p" autofocus></div>
+      <div class="form-row"><label>Device Type</label>
+        <select class="form-control" id="bt-type">${typeOpts}</select></div>
+    </div>
+    <div class="form-row-inline">
+      <div class="form-row"><label>Ports</label>
+        <input class="form-control" id="bt-ports" type="number" value="0" min="0"></div>
+      <div class="form-row"><label>U Height</label>
+        <input class="form-control" id="bt-uheight" type="number" value="1" min="1" max="50"></div>
+    </div>
+    <div class="form-row-inline">
+      <div class="form-row"><label>Manufacturer</label>
+        <input class="form-control" id="bt-mfr" placeholder="Cisco, HP, etc."></div>
+      <div class="form-row"><label>Model</label>
+        <input class="form-control" id="bt-model" placeholder="Model name"></div>
+    </div>
+    <div class="form-row"><label>Name Placeholder</label>
+      <input class="form-control" id="bt-namepl" placeholder="e.g. SW-01"></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveBuildTemplate()">Save Template</button>
+    </div>
+  `);
+  setTimeout(() => document.getElementById('bt-label')?.focus(), 50);
+}
+
+function saveBuildTemplate() {
+  const label = document.getElementById('bt-label')?.value?.trim();
+  if (!label) return toast('Enter a template label', 'error');
+  const deviceType = document.getElementById('bt-type')?.value || 'Misc.';
+  const ports = parseInt(document.getElementById('bt-ports')?.value) || 0;
+  const deviceUHeight = parseInt(document.getElementById('bt-uheight')?.value) || 1;
+  const manufacturer = document.getElementById('bt-mfr')?.value?.trim() || '';
+  const model = document.getElementById('bt-model')?.value?.trim() || '';
+  const namePlaceholder = document.getElementById('bt-namepl')?.value?.trim() || label;
+
+  const tpl = { label, deviceType, ports, deviceUHeight, namePlaceholder, manufacturer, model };
+  const p = getProject();
+  if (!p.customTemplates) p.customTemplates = [];
+  p.customTemplates.push(tpl);
+  save();
+  closeModal();
+  if (typeof renderRacks === 'function') renderRacks();
+  toast(`Template "${label}" created`, 'success');
 }
 
 function quickAddDevice(tplOrIdx) {
-  const tpl = (typeof tplOrIdx === 'number') ? DEVICE_TEMPLATES_FLAT[tplOrIdx] : tplOrIdx;
+  const flat = _flatTemplates();
+  const tpl = (typeof tplOrIdx === 'number') ? flat[tplOrIdx] : tplOrIdx;
   if (!tpl) return;
   _quickTpl = tpl;
   const portLine = tpl.ports ? ` · ${tpl.ports} ports` : '';
@@ -356,7 +433,7 @@ function quickAddDevice(tplOrIdx) {
     </div>
     ${tpl.isPP ? '' : `<div class="form-row-inline">
       <div class="form-row"><label>Manufacturer <span style="color:var(--text3);font-weight:400">(opt.)</span></label>
-        <input class="form-control" id="qt-mfr" placeholder="Cisco, HP, etc."></div>
+        <input class="form-control" id="qt-mfr" value="${esc(tpl.manufacturer||'')}" placeholder="Cisco, HP, etc."></div>
       <div class="form-row"><label>Model <span style="color:var(--text3);font-weight:400">(opt.)</span></label>
         <input class="form-control" id="qt-model" value="${esc(tpl.model||'')}"></div>
     </div>

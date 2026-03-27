@@ -113,6 +113,42 @@ async function gdriveSave() {
   });
 }
 
+async function gdriveSaveAll() {
+  if (!state.projects.length) return toast('No projects to save', 'error');
+  _driveAuth(async () => {
+    try {
+      const folderId = await _getOrCreateDriveFolder();
+      let saved = 0, failed = 0;
+      toast(`☁ Saving ${state.projects.length} project${state.projects.length !== 1 ? 's' : ''} to Drive…`);
+      for (const p of state.projects) {
+        try {
+          const fileName = p.name.replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_') + '_netrack.json';
+          const content = JSON.stringify({ _netrack_version: 2, typeColors: state.typeColors || {}, project: p }, null, 2);
+          const q = encodeURIComponent(`name='${fileName}' and '${folderId}' in parents and trashed=false`);
+          const search = await _driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`);
+          const { files } = await search.json();
+          if (files?.length) {
+            await _driveFetch(`https://www.googleapis.com/upload/drive/v3/files/${files[0].id}?uploadType=media`, {
+              method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: content
+            });
+          } else {
+            const boundary = 'nrm' + Date.now();
+            const meta = JSON.stringify({ name: fileName, parents: [folderId], mimeType: 'application/json' });
+            const body = `--${boundary}\r\nContent-Type: application/json\r\n\r\n${meta}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${content}\r\n--${boundary}--`;
+            await _driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+              method: 'POST', headers: { 'Content-Type': `multipart/related; boundary=${boundary}` }, body
+            });
+          }
+          saved++;
+        } catch (err) { failed++; }
+      }
+      const parts = [`${saved} saved`];
+      if (failed) parts.push(`${failed} failed`);
+      toast(`☁ ${parts.join(', ')}`, saved > 0 ? 'success' : 'error');
+    } catch (err) { toast('Drive save failed: ' + err.message, 'error'); }
+  });
+}
+
 async function gdriveLoad() {
   _driveAuth(async () => {
     try {
@@ -175,7 +211,7 @@ async function gdriveAddAllToDashboard() {
   state.driveIndex = merged;
   await _idbSaveConfig('driveIndex', merged);
   closeModal();
-  renderProjects();
+  if (typeof renderProjects === 'function') renderProjects();
   toast(`☁ ${files.length} project${files.length !== 1 ? 's' : ''} added — click one to download`, 'success');
 }
 
@@ -209,7 +245,9 @@ async function openDriveProject(driveFileId) {
     // Remove from drive index — it's now a local project
     state.driveIndex = state.driveIndex.filter(e => e.driveFileId !== driveFileId);
     _idbSaveConfig('driveIndex', state.driveIndex).catch(() => {});
-    openProject(p.id);
+    state.currentProjectId = p.id;
+    localStorage.setItem('netrack_current_project', p.id);
+    window.location.href = 'dashboard.html';
   } catch (err) { toast('Failed to load: ' + err.message, 'error'); }
 }
 
@@ -239,7 +277,9 @@ async function gdriveImportFile(fileId, fileName) {
     }
     save();
     closeModal();
-    // Open the project directly instead of going back to the grid
-    openProject(p.id);
+    // Open the project — openProject() is only on index.html, so fall back to direct nav
+    state.currentProjectId = p.id;
+    localStorage.setItem('netrack_current_project', p.id);
+    window.location.href = 'dashboard.html';
   } catch (err) { toast('Failed to load file: ' + err.message, 'error'); }
 }
