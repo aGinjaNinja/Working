@@ -1,24 +1,42 @@
 const VENDOR_TYPES = ['ISP','MSP','Carrier','Vendor','Other'];
 
 let _returnToUnresolved = false;
+let _pendingOUI = '';  // first 3 octets of MAC used for auto-matching after vendor add
 
 function addVendor() { openVendorModal(null); }
 function editVendor(id) { openVendorModal(id); }
 
-function addVendorFromUnresolved() {
+function addVendorFromUnresolved(mac) {
   _returnToUnresolved = true;
-  openVendorModal(null);
+  _pendingOUI = _extractOUI(mac);
+  openVendorModal(null, _pendingOUI);
 }
 
-function openVendorModal(id) {
+function _extractOUI(mac) {
+  if (!mac) return '';
+  // Normalize: strip common separators, lowercase
+  const clean = mac.replace(/[^a-fA-F0-9]/g, '').toLowerCase();
+  if (clean.length < 6) return '';
+  // Return first 3 octets formatted as XX:XX:XX
+  return clean.slice(0,2) + ':' + clean.slice(2,4) + ':' + clean.slice(4,6);
+}
+
+function _deviceMatchesOUI(deviceMac, oui) {
+  if (!deviceMac || !oui) return false;
+  return _extractOUI(deviceMac) === oui;
+}
+
+function openVendorModal(id, prefillOUI) {
   const v = id ? state.globalVendors.find(x=>x.id===id) : null;
   const isNew = !v;
   const typeOpts = VENDOR_TYPES.map(t=>`<option value="${t}" ${(v?.type||'Vendor')===t?'selected':''}>${t}</option>`).join('');
+  const prefillName = prefillOUI ? `OUI ${prefillOUI}` : '';
   openModal(`
     <h3>${isNew?'Add Vendor':'Edit Vendor'}</h3>
+    ${prefillOUI ? `<div style="font-size:11px;color:var(--accent);margin-bottom:10px;padding:6px 10px;background:rgba(0,200,255,.08);border:1px solid rgba(0,200,255,.2);border-radius:5px">MAC prefix: <strong style="font-family:var(--mono)">${esc(prefillOUI)}</strong> — after saving, all devices with this prefix will be auto-assigned.</div>` : ''}
     <div class="form-row-inline">
       <div class="form-row" style="flex:2"><label>Vendor Name *</label>
-        <input class="form-control" id="v-name" value="${esc(v?.name||'')}" placeholder="Comcast Business"></div>
+        <input class="form-control" id="v-name" value="${esc(v?.name||prefillName)}" placeholder="Comcast Business"></div>
       <div class="form-row"><label>Type</label>
         <select class="form-control" id="v-type">${typeOpts}</select></div>
     </div>
@@ -40,12 +58,16 @@ function openVendorModal(id) {
       <button class="btn btn-ghost" onclick="_cancelVendorModal()">Cancel</button>
       <button class="btn btn-primary" onclick="saveVendor('${id||''}')">Save</button>
     </div>`, '520px');
-  setTimeout(()=>document.getElementById('v-name')?.focus(),50);
+  setTimeout(()=>{
+    const nameEl = document.getElementById('v-name');
+    if (nameEl) { nameEl.focus(); nameEl.select(); }
+  },50);
 }
 
 function _cancelVendorModal() {
   const wasReturning = _returnToUnresolved;
   _returnToUnresolved = false;
+  _pendingOUI = '';
   closeModal();
   if (wasReturning) showUnresolvedDevices();
 }
@@ -72,28 +94,49 @@ function saveVendor(id) {
   saveGlobalVendors();
   closeModal();
 
-  // If we came from the unresolved list, try to auto-match and return there
+  // If we came from the unresolved list, auto-match by OUI then return
   if (_returnToUnresolved) {
+    const oui = _pendingOUI;
     _returnToUnresolved = false;
-    // Auto-match: assign the new vendor to unresolved devices whose manufacturer matches the vendor name
-    if (!id) _autoMatchVendor(newVendorId, data.name);
+    _pendingOUI = '';
+    if (!id && oui) {
+      _autoMatchByOUI(newVendorId, oui);
+    } else if (!id) {
+      _autoMatchByName(newVendorId, data.name);
+    }
     showUnresolvedDevices();
   } else {
-    // Re-render whichever view is active
     if (typeof renderVendorPage === 'function' && document.getElementById('vendor-list-area')) renderVendorPage();
     if (typeof renderDashboard === 'function' && typeof getProject === 'function' && getProject()) renderDashboard();
   }
   toast(id?'Vendor updated':'Vendor added','success');
 }
 
-function _autoMatchVendor(vendorId, vendorName) {
+function _autoMatchByOUI(vendorId, oui) {
+  if (!oui) return;
+  let matched = 0;
+  state.projects.forEach(p => {
+    (p.devices||[]).forEach(d => {
+      if (!_isVendorMissing(d.vendorId)) return;
+      if (_deviceMatchesOUI(d.mac, oui)) {
+        d.vendorId = vendorId;
+        matched++;
+      }
+    });
+  });
+  if (matched > 0) {
+    save();
+    toast(`Auto-assigned ${matched} device${matched!==1?'s':''} with MAC prefix ${oui}`, 'success');
+  }
+}
+
+function _autoMatchByName(vendorId, vendorName) {
   if (!vendorName) return;
   const vLower = vendorName.toLowerCase().trim();
   let matched = 0;
   state.projects.forEach(p => {
     (p.devices||[]).forEach(d => {
-      if (!_isVendorMissing(d.vendorId)) return; // already has a vendor
-      // Match if manufacturer contains the vendor name or vice versa
+      if (!_isVendorMissing(d.vendorId)) return;
       const mfr = (d.manufacturer||'').toLowerCase().trim();
       if (mfr && (mfr.includes(vLower) || vLower.includes(mfr))) {
         d.vendorId = vendorId;
@@ -111,7 +154,6 @@ function deleteVendor(id) {
   if(!confirm('Delete this vendor?')) return;
   const v = state.globalVendors.find(x=>x.id===id);
   state.globalVendors = state.globalVendors.filter(x=>x.id!==id);
-  // Clear vendorId references across all projects
   state.projects.forEach(p => {
     (p.devices||[]).forEach(d => { if (d.vendorId === id) d.vendorId = ''; });
   });
@@ -130,7 +172,6 @@ function renderVendorPage() {
   if (!area) return;
   const vendors = state.globalVendors || [];
 
-  // Count how many devices across all projects reference each vendor
   const usageCounts = {};
   vendors.forEach(v => { usageCounts[v.id] = 0; });
   state.projects.forEach(p => {
@@ -139,7 +180,6 @@ function renderVendorPage() {
     });
   });
 
-  // Count unresolved devices (no vendor assigned, across all projects)
   let unresolvedCount = 0;
   state.projects.forEach(p => {
     (p.devices||[]).forEach(d => {
@@ -206,7 +246,7 @@ function showUnresolvedDevices() {
   state.projects.forEach(p => {
     (p.devices||[]).forEach(d => {
       if (_isVendorMissing(d.vendorId)) {
-        rows.push({ project: p.name, device: d.name, type: d.deviceType||'', ip: d.ip||'', manufacturer: d.manufacturer||'', id: d.id, pid: p.id });
+        rows.push({ project: p.name, device: d.name, type: d.deviceType||'', ip: d.ip||'', mac: d.mac||'', manufacturer: d.manufacturer||'', id: d.id, pid: p.id });
       }
     });
   });
@@ -222,9 +262,9 @@ function showUnresolvedDevices() {
   openModal(`
     <h3 style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
       <span>⚠ Devices Without Vendor (${rows.length})</span>
-      <button class="btn btn-primary btn-sm" onclick="addVendorFromUnresolved()">+ Add Vendor</button>
+      <button class="btn btn-primary btn-sm" onclick="addVendorFromUnresolved('')">+ Add Vendor</button>
     </h3>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Assign an existing vendor to each device, or click <strong>Add Vendor</strong> to create a new one.</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Assign an existing vendor, or click a row's <strong>Add Vendor</strong> to create one from the device's MAC prefix.</div>
     ${hasVendors ? `
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:8px 10px;background:var(--panel);border:1px solid var(--border);border-radius:6px">
       <label style="font-size:11px;white-space:nowrap;color:var(--text2)">Bulk assign:</label>
@@ -237,26 +277,32 @@ function showUnresolvedDevices() {
           <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)">Project</th>
           <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)">Device</th>
           <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)">Type</th>
+          <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)">MAC Address</th>
           <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)">Manufacturer</th>
           <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)">IP</th>
-          <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);min-width:140px">Assign Vendor</th>
+          <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);min-width:130px">Assign Vendor</th>
+          <th style="padding:6px 8px;border-bottom:1px solid var(--border);width:80px"></th>
         </tr></thead>
         <tbody>
-          ${rows.map(r=>`<tr style="border-bottom:1px solid var(--border)">
+          ${rows.map(r=>{
+            const oui = _extractOUI(r.mac);
+            return `<tr style="border-bottom:1px solid var(--border)">
             <td style="padding:6px 8px;color:var(--text2)">${esc(r.project)}</td>
             <td style="padding:6px 8px;font-weight:600">${esc(r.device)}</td>
             <td style="padding:6px 8px">${esc(r.type)}</td>
+            <td style="padding:6px 8px;font-family:var(--mono);font-size:10px">${r.mac ? esc(r.mac) : '<span style="color:var(--text3)">—</span>'}</td>
             <td style="padding:6px 8px;font-size:10px;color:var(--text2)">${esc(r.manufacturer||'—')}</td>
             <td style="padding:6px 8px;font-family:var(--mono)">${esc(r.ip||'—')}</td>
-            <td style="padding:6px 8px">${hasVendors ? `<select class="form-control unres-vendor" data-pid="${r.pid}" data-did="${r.id}" style="font-size:11px;padding:3px 6px"><option value="">—</option>${vendorOpts}</select>` : `<span style="font-size:10px;color:var(--text3)">No vendors yet</span>`}</td>
-          </tr>`).join('')}
+            <td style="padding:6px 8px">${hasVendors ? `<select class="form-control unres-vendor" data-pid="${r.pid}" data-did="${r.id}" style="font-size:11px;padding:3px 6px"><option value="">—</option>${vendorOpts}</select>` : `<span style="font-size:10px;color:var(--text3)">—</span>`}</td>
+            <td style="padding:6px 8px"><button class="btn btn-ghost btn-sm" onclick="addVendorFromUnresolved('${esc(r.mac)}')" style="font-size:10px;white-space:nowrap;padding:2px 8px">+ Add</button></td>
+          </tr>`;}).join('')}
         </tbody>
       </table>
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal();if(typeof renderVendorPage==='function')renderVendorPage()">Close</button>
       ${hasVendors ? `<button class="btn btn-primary" onclick="saveUnresolvedVendors()">Save Assignments</button>` : ''}
-    </div>`, '780px');
+    </div>`, '880px');
 }
 
 function bulkAssignVendor() {
