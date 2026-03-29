@@ -12,7 +12,7 @@ function renderCableRuns() {
   // Filtered runs
   let filtered = runs.filter(r=>{
     if(filterType!=='all' && r.type!==filterType) return false;
-    if(filterRoom && !(r.fromRoom||'').toLowerCase().includes(filterRoom) && !(r.toRoom||'').toLowerCase().includes(filterRoom)) return false;
+    if(filterRoom && !(r.fromRoom||'').toLowerCase().includes(filterRoom) && !(r.toRoom||'').toLowerCase().includes(filterRoom) && !(r.label||'').toLowerCase().includes(filterRoom) && !(r.notes||'').toLowerCase().includes(filterRoom)) return false;
     return true;
   });
 
@@ -24,7 +24,7 @@ function renderCableRuns() {
     <div style="margin-bottom:14px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
       <div class="search-box" style="max-width:200px">
         <span style="color:var(--text3)">⌕</span>
-        <input placeholder="Filter by room..." value="${esc(state.cableRoomFilter||'')}" oninput="state.cableRoomFilter=this.value;renderCableRuns()">
+        <input placeholder="Search runs..." value="${esc(state.cableRoomFilter||'')}" oninput="state.cableRoomFilter=this.value;renderCableRuns()">
       </div>
       <div class="filter-tabs">
         <div class="filter-tab ${filterType==='all'?'active':''}" onclick="state.cableTypeFilter='all';renderCableRuns()">All (${runs.length})</div>

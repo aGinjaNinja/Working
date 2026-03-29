@@ -488,7 +488,8 @@ function saveQuickDevice() {
       deviceUHeight: tpl.deviceUHeight || 1,
       rackId: null, rackU: null,
       portAssignments: {}, portNotes: {}, portVlans: {}, portPeerPort: {}, portPoe: {}, portLabels: {},
-      webUser: '', webPassword: '', webProtocol: 'https', parentDeviceId: ''
+      webUser: '', webPassword: '', webProtocol: 'https', parentDeviceId: '',
+      addedDate: new Date().toISOString()
     };
   }
 

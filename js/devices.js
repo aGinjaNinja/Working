@@ -18,7 +18,7 @@ function renderDevices(preserveSearch) {
   let devs = allNonPP.filter(d => {
     if (filter !== 'all' && d.deviceType !== filter) return false;
     if (statusFilter !== 'all' && (d.status||'') !== statusFilter) return false;
-    if (search && !d.name.toLowerCase().includes(search) && !(d.ip||'').includes(search) && !(d.model||'').toLowerCase().includes(search) && !(d.mac||'').toLowerCase().includes(search) && !(d.deviceType||'').toLowerCase().includes(search) && !(d.serial||'').toLowerCase().includes(search)) return false;
+    if (search && !d.name.toLowerCase().includes(search) && !(d.ip||'').includes(search) && !(d.model||'').toLowerCase().includes(search) && !(d.mac||'').toLowerCase().includes(search) && !(d.deviceType||'').toLowerCase().includes(search) && !(d.serial||'').toLowerCase().includes(search) && !(d.manufacturer||'').toLowerCase().includes(search) && !(d.notes||'').toLowerCase().includes(search)) return false;
     return true;
   });
 
@@ -534,7 +534,8 @@ function savePatchPanel() {
     type: 'non-switching', ip: '', mac: '', manufacturer: '', model, notes,
     ports, deviceUHeight: uheight,
     rackId: null, rackU: null,
-    portAssignments: {}, portNotes: {}, portVlans: {}, portPeerPort: {}, portPoe: {}, portLabels: {}
+    portAssignments: {}, portNotes: {}, portVlans: {}, portPeerPort: {}, portPoe: {}, portLabels: {},
+    addedDate: new Date().toISOString()
   };
   p.devices.push(dev);
   logChange(`Patch Panel added: ${name} (${ports} ports)`);
@@ -641,6 +642,7 @@ function commitImportReview() {
     const { _rid, _selected, ...dev } = c;
     // Skip if IP already exists
     if (dev.ip && p.devices.find(d => d.ip === dev.ip)) return;
+    if (!dev.addedDate) dev.addedDate = new Date().toISOString();
     p.devices.push(dev);
   });
   save(); closeModal();

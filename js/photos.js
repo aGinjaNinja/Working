@@ -98,7 +98,7 @@ function renderPhotos() {
         <div class="photo-thumb" style="background-image:url('${ph.data}')"></div>
         <div class="photo-meta">
           <div class="photo-title">${esc(ph.caption || ph.name || 'Photo ' + (idx+1))}</div>
-          <div class="photo-date">${ph.date ? new Date(ph.date).toLocaleDateString() : ''}${assigned?` · <span style="color:var(--accent)">${assigned} tagged</span>`:''}</div>
+          <div class="photo-date">${ph.ts ? new Date(ph.ts).toLocaleDateString() : (ph.date ? new Date(ph.date).toLocaleDateString() : '')}${assigned?` · <span style="color:var(--accent)">${assigned} tagged</span>`:''}</div>
         </div>
         ${folderBadge}
         ${p.photoFolders.length > 0 ? `<button style="position:absolute;top:6px;left:6px;background:rgba(0,0,0,.65);border:1px solid var(--border2);border-radius:4px;color:var(--text2);cursor:pointer;width:22px;height:22px;font-size:11px;display:none;align-items:center;justify-content:center;" class="photo-move-btn" title="Move to folder" onclick="event.stopPropagation();movePhotoToFolder(${idx})">📁</button>` : ''}
@@ -313,7 +313,7 @@ function uploadPhotos(e) {
     const reader = new FileReader();
     reader.onload = ev => {
       const folderId = (_currentPhotoFolderId !== 'all') ? _currentPhotoFolderId : '';
-      p.photos.push({ name: file.name, caption: '', data: ev.target.result, date: Date.now(), size: file.size, assignments: [], folderId });
+      p.photos.push({ id: genId(), name: file.name, caption: '', data: ev.target.result, ts: new Date().toISOString(), date: Date.now(), size: file.size, assignments: [], folderId: folderId || '' });
       logChange(`Photo added: "${file.name}" (${(file.size/1024).toFixed(0)} KB)`);
       done++;
       if (done === files.length) { save(); renderPhotos(); toast(`Added ${files.length} photo${files.length>1?'s':''}`, 'success'); }
@@ -748,7 +748,8 @@ function submitQuickDevice(slotIdx) {
     ip: ip||'', mac: mac||'', manufacturer: '', model: '', notes: '',
     ports: 0, deviceUHeight: 1, rackId: null, rackU: null,
     portAssignments: {}, portNotes: {}, portVlans: {}, portPeerPort: {}, portPoe: {}, portLabels: {},
-    webUser: '', webPassword: '', webProtocol: 'https', parentDeviceId: ''
+    webUser: '', webPassword: '', webProtocol: 'https', parentDeviceId: '',
+    addedDate: new Date().toISOString()
   };
   if (!p.devices) p.devices = [];
   p.devices.push(newDev);

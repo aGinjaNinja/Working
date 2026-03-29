@@ -73,15 +73,22 @@ function saveProjectDetails() {
   toast('Project details saved', 'success');
 }
 
+let _colorDebounce = null;
+let _colorOldValue = {};
 function updateTypeColor(typeName, color) {
-  const oldColor = dtColor(typeName);
   if (!state.typeColors) state.typeColors = {};
+  if (!_colorOldValue[typeName]) _colorOldValue[typeName] = dtColor(typeName);
   state.typeColors[typeName] = color;
   const key = typeName.replace(/[^a-z0-9]/gi,'_');
   const dotEl = document.getElementById(`dot-${key}`);
   if (dotEl) dotEl.style.background = color;
-  logChange(`Device type color changed: ${typeName} — ${oldColor} → ${color}`);
-  save();
+  clearTimeout(_colorDebounce);
+  _colorDebounce = setTimeout(() => {
+    const oldColor = _colorOldValue[typeName] || color;
+    if (oldColor !== color) logChange(`Device type color changed: ${typeName} — ${oldColor} → ${color}`);
+    delete _colorOldValue[typeName];
+    save();
+  }, 400);
 }
 
 function resetTypeColors() {

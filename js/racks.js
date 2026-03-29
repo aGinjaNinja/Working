@@ -429,7 +429,8 @@ function saveDeviceToRack() {
     deviceUHeight: uheight, rackId, rackU: u,
     portAssignments: {}, portNotes: {}, portVlans: {}, portPeerPort: {}, portPoe: {}, portLabels: {},
     webUser: '', webPassword: '', webProtocol: 'https', parentDeviceId: '',
-    status: '', serial: '', warrantyExpiry: '', eolDate: ''
+    status: '', serial: '', warrantyExpiry: '', eolDate: '',
+    addedDate: new Date().toISOString()
   };
   p.devices.push(dev);
   logChange(`Device added to rack at U${u}: ${name}`);

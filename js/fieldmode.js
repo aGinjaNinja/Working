@@ -3,7 +3,11 @@ function renderFieldMode() {
   setTopbarActions('');
   const today = new Date().toISOString().slice(0,10);
   const todayDevs = p.devices.filter(d => d.addedDate && d.addedDate.startsWith(today));
-  const todayPhotos = (p.photos||[]).filter(ph => ph.ts && ph.ts.startsWith(today));
+  const todayPhotos = (p.photos||[]).filter(ph => {
+    if (ph.ts && ph.ts.startsWith(today)) return true;
+    if (ph.date && new Date(ph.date).toISOString().startsWith(today)) return true;
+    return false;
+  });
 
   document.getElementById('view-area').innerHTML = `
     <div style="max-width:640px;margin:0 auto">
@@ -46,7 +50,7 @@ function renderFieldMode() {
           <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;background:var(--card);border:1px solid var(--border);border-radius:7px;margin-bottom:6px">
             <span style="font-size:18px">📷</span>
             <div style="flex:1;min-width:0"><div style="font-weight:600">${esc(ph.caption||'(No caption)')}</div>
-            <div style="font-size:11px;color:var(--text2);font-family:var(--mono)">${fmtTs(ph.ts)}</div></div>
+            <div style="font-size:11px;color:var(--text2);font-family:var(--mono)">${fmtTs(ph.ts || (ph.date ? new Date(ph.date).toISOString() : ''))}</div></div>
           </div>`).join('')}
       </div>
     </div>`;
@@ -69,7 +73,7 @@ function fieldQuickPhoto() {
     if (!p.photoFolders) p.photoFolders=[];
     const reader = new FileReader();
     reader.onload = ev => {
-      const photo = { id:genId(), caption:caption||file.name, data:ev.target.result, ts:new Date().toISOString(), folderId:null, assignments:[] };
+      const photo = { id:genId(), name:file.name, caption:caption||file.name, data:ev.target.result, ts:new Date().toISOString(), date:Date.now(), size:file.size, folderId:'', assignments:[] };
       p.photos.push(photo);
       logChange(`Photo added (field): "${photo.caption}"`);
       save();

@@ -17,42 +17,42 @@ function printSiteReport() {
   const devTableRows = devsByType.map(d=>{
     const rack = p.racks.find(r=>r.id===d.rackId);
     return `<tr>
-      <td>${d.name}</td><td>${d.deviceType||''}</td>
-      <td>${d.ip||'—'}</td><td>${d.mac||'—'}</td>
-      <td>${d.manufacturer||''} ${d.model||''}</td>
-      <td>${rack?rack.name:'—'}</td>
-      <td>${d.serial||'—'}</td>
-      <td>${STATUS_LABELS[d.status]||d.status||'—'}</td>
+      <td>${esc(d.name)}</td><td>${esc(d.deviceType||'')}</td>
+      <td>${esc(d.ip||'—')}</td><td>${esc(d.mac||'—')}</td>
+      <td>${esc(d.manufacturer||'')} ${esc(d.model||'')}</td>
+      <td>${rack?esc(rack.name):'—'}</td>
+      <td>${esc(d.serial||'—')}</td>
+      <td>${esc(STATUS_LABELS[d.status]||d.status||'—')}</td>
     </tr>`;
   }).join('');
 
   const rackSections = p.racks.map(r=>{
     const rDevs = p.devices.filter(d=>d.rackId===r.id).sort((a,b)=>(a.rackU||0)-(b.rackU||0));
-    return `<h3>${r.name} — ${r.location||'No location'} (${r.uHeight}U)</h3>
+    return `<h3>${esc(r.name)} — ${esc(r.location||'No location')} (${r.uHeight}U)</h3>
       <table><thead><tr><th>U</th><th>Device</th><th>Type</th><th>IP</th></tr></thead><tbody>
-      ${rDevs.map(d=>`<tr><td>${d.rackU||'—'}</td><td>${d.name}</td><td>${d.deviceType||''}</td><td>${d.ip||'—'}</td></tr>`).join('')}
+      ${rDevs.map(d=>`<tr><td>${d.rackU||'—'}</td><td>${esc(d.name)}</td><td>${esc(d.deviceType||'')}</td><td>${esc(d.ip||'—')}</td></tr>`).join('')}
       </tbody></table>`;
   }).join('');
 
   const vendorRows = (p.vendors||[]).map(v=>`<tr>
-    <td>${v.type||''}</td><td>${v.name||''}</td><td>${v.accountNum||'—'}</td>
-    <td>${v.circuitId||'—'}</td><td>${v.supportPhone||''} ${v.supportEmail||''}</td>
+    <td>${esc(v.type||'')}</td><td>${esc(v.name||'')}</td><td>${esc(v.accountNum||'—')}</td>
+    <td>${esc(v.circuitId||'—')}</td><td>${esc(v.supportPhone||'')} ${esc(v.supportEmail||'')}</td>
   </tr>`).join('');
 
   const notesList = (p.siteNotes||[]).map(n=>`<div style="margin-bottom:8px;padding:6px 8px;border:1px solid #ddd;border-radius:3px">
     <div style="font-size:10px;color:#777">${fmtTs(n.ts)}</div>
-    <div>${n.text}</div>
+    <div>${esc(n.text)}</div>
   </div>`).join('');
 
-  const logList = log50.map(e=>`<tr><td style="white-space:nowrap">${fmtTs(e.ts)}</td><td>${e.msg}</td></tr>`).join('');
+  const logList = log50.map(e=>`<tr><td style="white-space:nowrap">${fmtTs(e.ts)}</td><td>${esc(e.msg)}</td></tr>`).join('');
 
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Site Report — ${p.name}</title><style>${css}</style></head>
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Site Report — ${esc(p.name)}</title><style>${css}</style></head>
     <body>
     <div class="header">
-      <h1>${p.name||'Site Report'}</h1>
-      <div class="meta">Company: ${p.company||'—'}</div>
-      <div class="meta">Location: ${p.location||'—'}</div>
-      <div class="meta">Management Contact: ${p.contactMgmt||'—'} &nbsp;·&nbsp; IT Contact: ${p.contactIT||'—'}</div>
+      <h1>${esc(p.name||'Site Report')}</h1>
+      <div class="meta">Company: ${esc(p.company||'—')}</div>
+      <div class="meta">Location: ${esc(p.location||'—')}</div>
+      <div class="meta">Management Contact: ${esc(p.contactMgmt||'—')} &nbsp;·&nbsp; IT Contact: ${esc(p.contactIT||'—')}</div>
       <div class="meta">Generated: ${now}</div>
     </div>
 
@@ -105,14 +105,14 @@ function printPortLabels(switchId) {
     const lbl = labels[i]||'';
     labelHtml += `<div class="label">
       <div class="port-num">Port ${i}</div>
-      ${lbl?`<div class="port-lbl">${lbl}</div>`:'<div class="port-lbl" style="color:#ccc">—</div>'}
-      ${connDev?`<div class="port-dev">→ ${connDev.name}</div>`:''}
+      ${lbl?`<div class="port-lbl">${esc(lbl)}</div>`:'<div class="port-lbl" style="color:#ccc">—</div>'}
+      ${connDev?`<div class="port-dev">→ ${esc(connDev.name)}</div>`:''}
     </div>`;
   }
 
-  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Port Labels — ${sw.name}</title><style>${labelCss}</style></head>
+  const html = `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Port Labels — ${esc(sw.name)}</title><style>${labelCss}</style></head>
     <body>
-    <h1>${sw.name} — Port Labels &nbsp;<span style="font-size:11px;color:#777;font-weight:400">Printed: ${now}</span></h1>
+    <h1>${esc(sw.name)} — Port Labels &nbsp;<span style="font-size:11px;color:#777;font-weight:400">Printed: ${now}</span></h1>
     <div class="grid">${labelHtml}</div>
     </body></html>`;
 

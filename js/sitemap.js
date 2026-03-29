@@ -238,7 +238,7 @@ function smMouseMove(e) {
 function smMouseUp(e) {
   _smDragging=false;
   const c=document.getElementById('sm-canvas');
-  if(c) c.style.cursor='crosshair';
+  if(c) c.style.cursor=_smEditMode?'crosshair':'grab';
 }
 function smWheel(e) {
   e.preventDefault();

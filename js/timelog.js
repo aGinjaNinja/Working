@@ -65,7 +65,8 @@ function updateTimerDisplay() {
   const m = Math.floor((elapsed%3600000)/60000);
   const s = Math.floor((elapsed%60000)/1000);
   el.textContent = `${h>0?h+'h ':''} ${m}m ${s}s`;
-  if (!_timerInterval) _timerInterval = setInterval(()=>{ const e2=document.getElementById('timer-elapsed'); if(!e2){clearInterval(_timerInterval);_timerInterval=null;return;} const el2=Date.now()-state.activeTimer.startTs; const hh=Math.floor(el2/3600000),mm=Math.floor((el2%3600000)/60000),ss=Math.floor((el2%60000)/1000); e2.textContent=`${hh>0?hh+'h ':''} ${mm}m ${ss}s`; }, 1000);
+  if (_timerInterval) { clearInterval(_timerInterval); _timerInterval = null; }
+  _timerInterval = setInterval(()=>{ const e2=document.getElementById('timer-elapsed'); if(!e2){clearInterval(_timerInterval);_timerInterval=null;return;} if(!state.activeTimer){clearInterval(_timerInterval);_timerInterval=null;return;} const el2=Date.now()-state.activeTimer.startTs; const hh=Math.floor(el2/3600000),mm=Math.floor((el2%3600000)/60000),ss=Math.floor((el2%60000)/1000); e2.textContent=`${hh>0?hh+'h ':''} ${mm}m ${ss}s`; }, 1000);
 }
 
 function addTimeEntry() { openTimeEntryModal(null); }

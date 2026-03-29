@@ -47,8 +47,10 @@ function toggleChecklistItem(id, checked) {
 }
 
 function deleteChecklistItem(id) {
+  if (!confirm('Delete this checklist item?')) return;
   const p = getProject();
   p.checklist = (p.checklist||[]).filter(i=>i.id!==id);
+  logChange('Checklist item deleted');
   save(); renderChecklist();
 }
 

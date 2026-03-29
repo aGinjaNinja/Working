@@ -83,6 +83,7 @@ function migrateDevice(d) {
   if (d.serial === undefined) d.serial = '';
   if (d.warrantyExpiry === undefined) d.warrantyExpiry = '';
   if (d.eolDate === undefined) d.eolDate = '';
+  if (!d.addedDate) d.addedDate = '';
   return d;
 }
 
@@ -132,6 +133,7 @@ function migrateProject(p) {
   // Feature 13: Site Map
   if (!p.siteMap) p.siteMap = { data: null, markers: [], cableLines: [] };
   if (!p.siteMap.cableLines) p.siteMap.cableLines = [];
+  if (!p.customTemplates) p.customTemplates = [];
   p.devices.forEach(migrateDevice);
   return p;
 }
@@ -475,15 +477,15 @@ async function fsaPickFolder() {
   }
 }
 // Write one project file to the chosen folder
-async function fsaWriteProject(p, bundle) {
+async function fsaWriteProject(p, bundle, silent) {
   const handle = await fsaGetHandle();
   if (!handle) {
-    toast('No backup folder chosen — open Settings & Backup to pick one', 'error');
+    if (!silent) toast('No backup folder chosen — open Settings & Backup to pick one', 'error');
     return;
   }
   const ok = await fsaEnsurePermission(handle);
   if (!ok) {
-    toast('Folder permission denied — re-open Settings & Backup to re-grant access', 'error');
+    if (!silent) toast('Folder permission denied — re-open Settings & Backup to re-grant access', 'error');
     return;
   }
   const safeName = p.name.replace(/[^a-z0-9_\-. ]/gi, '_');
@@ -493,14 +495,14 @@ async function fsaWriteProject(p, bundle) {
   await writable.close();
 }
 
-async function backupProjectToAgent(p) {
+async function backupProjectToAgent(p, silent = true) {
   const cfg = loadBackupConfig();
   const mode = cfg.mode || 'local-fs';
   if (mode === 'none') return;
   const bundle = { _netrack_version: 2, typeColors: state.typeColors, project: p };
   try {
     if (mode === 'local-fs') {
-      await fsaWriteProject(p, bundle);
+      await fsaWriteProject(p, bundle, silent);
     } else if (mode === 'agent') {
       await fetch('http://localhost:7734/save-project', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -664,7 +666,7 @@ async function gsBackupAllNow() {
   const cfg = loadBackupConfig();
   if ((cfg.mode || 'agent') === 'none') { toast('Backup is disabled \u2014 enable it in Settings first', 'error'); return; }
   let ok = 0, fail = 0;
-  for (const p of state.projects) { try { await backupProjectToAgent(p); ok++; } catch(e) { fail++; } }
+  for (const p of state.projects) { try { await backupProjectToAgent(p, false); ok++; } catch(e) { fail++; } }
   toast('Backed up ' + ok + ' project' + (ok !== 1 ? 's' : '') + (fail ? ' (' + fail + ' failed)' : ''), ok ? 'success' : 'error');
 }
 
@@ -790,8 +792,7 @@ function showScreen(id) {
   }
 }
 
-function closeModal(e) {
-  if (e && e.target !== document.getElementById('modal-overlay')) return;
+function closeModal() {
   document.getElementById('modal-content').classList.remove('modal-wide');
   document.getElementById('modal-overlay').classList.remove('open');
 }
@@ -822,10 +823,7 @@ function toast(msg, type) {
   toastTimer = setTimeout(() => { el.className = ''; }, 2500);
 }
 
-// Keyboard shortcuts
-document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') document.getElementById('modal-overlay').classList.remove('open');
-});
+// Escape key no longer closes modals — use Cancel/Save/Close buttons only
 
 
 async function lookupMacManufacturers() {
