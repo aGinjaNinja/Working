@@ -6,10 +6,57 @@ let _pendingOUI = '';
 function addVendor() { openVendorModal(null); }
 function editVendor(id) { openVendorModal(id); }
 
-function addVendorFromUnresolved(mac) {
-  _returnToUnresolved = true;
-  _pendingOUI = _extractOUI(mac);
-  openVendorModal(null, _pendingOUI);
+function addVendorFromUnresolved(mac, deviceId, projectId) {
+  const oui = _extractOUI(mac);
+  openModal(`
+    <h3>Assign Manufacturer</h3>
+    ${oui ? `<div style="font-size:11px;color:var(--accent);margin-bottom:10px;padding:6px 10px;background:rgba(0,200,255,.08);border:1px solid rgba(0,200,255,.2);border-radius:5px">MAC prefix: <strong style="font-family:var(--mono)">${esc(oui)}</strong> — all devices sharing this prefix will be auto-assigned.</div>` : ''}
+    <div class="form-row"><label>Manufacturer Name</label>
+      <input class="form-control" id="unres-mfr-name" placeholder="e.g. Cisco, Ubiquiti, Ruckus" autofocus></div>
+    <input type="hidden" id="unres-mfr-mac" value="${esc(mac||'')}">
+    <input type="hidden" id="unres-mfr-did" value="${esc(deviceId||'')}">
+    <input type="hidden" id="unres-mfr-pid" value="${esc(projectId||'')}">
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal();showUnresolvedDevices()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveQuickManufacturer()">Save</button>
+    </div>`, '400px');
+  setTimeout(() => document.getElementById('unres-mfr-name')?.focus(), 50);
+}
+
+function saveQuickManufacturer() {
+  const name = document.getElementById('unres-mfr-name')?.value?.trim();
+  if (!name) return toast('Enter a manufacturer name', 'error');
+  const mac = document.getElementById('unres-mfr-mac')?.value || '';
+  const did = document.getElementById('unres-mfr-did')?.value || '';
+  const pid = document.getElementById('unres-mfr-pid')?.value || '';
+  const oui = _extractOUI(mac);
+
+  // Add to globalVendors if not already there
+  let vendor = state.globalVendors.find(v => v.name.toLowerCase() === name.toLowerCase());
+  if (!vendor) {
+    vendor = { id: genId(), name, type: 'Vendor', accountNum: '', circuitId: '', supportPhone: '', supportEmail: '', notes: '' };
+    state.globalVendors.push(vendor);
+    saveGlobalVendors();
+  }
+
+  // Assign to the clicked device directly
+  if (did && pid) {
+    const proj = state.projects.find(p => p.id === pid);
+    if (proj) {
+      const dev = proj.devices.find(d => d.id === did);
+      if (dev) { dev.manufacturer = name; dev.vendorId = vendor.id; }
+    }
+  }
+
+  // Auto-match all unresolved devices sharing the same OUI prefix
+  if (oui) {
+    _autoMatchByOUI(vendor.id, name, oui);
+  }
+
+  save();
+  closeModal();
+  showUnresolvedDevices();
+  toast(`Manufacturer "${name}" assigned`, 'success');
 }
 
 function _extractOUI(mac) {
@@ -269,7 +316,7 @@ function showUnresolvedDevices() {
   openModal(`
     <h3 style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
       <span>⚠ ${rows.length} Device${rows.length!==1?'s':''} Without Vendor</span>
-      <button class="btn btn-primary btn-sm" onclick="addVendorFromUnresolved('')">+ New Vendor</button>
+      <button class="btn btn-primary btn-sm" onclick="_returnToUnresolved=true;openVendorModal(null)">+ New Vendor</button>
     </h3>
     <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Click <strong>+ Add</strong> on a row to create a vendor from that device's MAC prefix (first 3 octets). All devices sharing that prefix get auto-assigned.</div>
     ${hasVendors ? `
@@ -297,7 +344,7 @@ function showUnresolvedDevices() {
             <td style="padding:6px 8px;font-family:var(--mono);font-size:10px;white-space:nowrap">${r.mac ? esc(r.mac) : '<span style="color:var(--text3)">—</span>'}</td>
             <td style="padding:6px 8px;font-family:var(--mono);white-space:nowrap">${esc(r.ip||'—')}</td>
             <td style="padding:6px 8px">${hasVendors ? `<select class="form-control unres-vendor" data-pid="${r.pid}" data-did="${r.id}" style="font-size:11px;padding:3px 6px"><option value="">—</option>${vendorOpts}</select>` : '<span style="font-size:10px;color:var(--text3)">—</span>'}</td>
-            <td style="padding:6px 8px;text-align:center"><button class="btn btn-primary btn-sm" onclick="addVendorFromUnresolved('${esc(r.mac)}')" style="font-size:10px;white-space:nowrap;padding:3px 10px">+ Add</button></td>
+            <td style="padding:6px 8px;text-align:center"><button class="btn btn-primary btn-sm" onclick="addVendorFromUnresolved('${esc(r.mac)}','${r.id}','${r.pid}')" style="font-size:10px;white-space:nowrap;padding:3px 10px">+ Add</button></td>
           </tr>`).join('')}
         </tbody>
       </table>
