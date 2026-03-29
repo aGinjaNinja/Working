@@ -1,7 +1,14 @@
 const VENDOR_TYPES = ['ISP','MSP','Carrier','Vendor','Other'];
 
+let _returnToUnresolved = false;
+
 function addVendor() { openVendorModal(null); }
 function editVendor(id) { openVendorModal(id); }
+
+function addVendorFromUnresolved() {
+  _returnToUnresolved = true;
+  openVendorModal(null);
+}
 
 function openVendorModal(id) {
   const v = id ? state.globalVendors.find(x=>x.id===id) : null;
@@ -30,10 +37,17 @@ function openVendorModal(id) {
     <div class="form-row"><label>Notes</label>
       <textarea class="form-control" id="v-notes" rows="2" placeholder="Contract terms, SLA, etc.">${esc(v?.notes||'')}</textarea></div>
     <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-ghost" onclick="_cancelVendorModal()">Cancel</button>
       <button class="btn btn-primary" onclick="saveVendor('${id||''}')">Save</button>
     </div>`, '520px');
   setTimeout(()=>document.getElementById('v-name')?.focus(),50);
+}
+
+function _cancelVendorModal() {
+  const wasReturning = _returnToUnresolved;
+  _returnToUnresolved = false;
+  closeModal();
+  if (wasReturning) showUnresolvedDevices();
 }
 
 function saveVendor(id) {
@@ -47,18 +61,50 @@ function saveVendor(id) {
     supportEmail: document.getElementById('v-email')?.value?.trim()||'',
     notes: document.getElementById('v-notes')?.value?.trim()||'',
   };
+  let newVendorId = id;
   if (id) {
     const idx=state.globalVendors.findIndex(v=>v.id===id);
     if(idx>=0) Object.assign(state.globalVendors[idx],data);
   } else {
-    state.globalVendors.push({id:genId(),...data});
+    newVendorId = genId();
+    state.globalVendors.push({id:newVendorId,...data});
   }
   saveGlobalVendors();
   closeModal();
-  // Re-render whichever view is active
-  if (typeof renderVendorPage === 'function' && document.getElementById('vendor-list-area')) renderVendorPage();
-  if (typeof renderDashboard === 'function' && typeof getProject === 'function' && getProject()) renderDashboard();
+
+  // If we came from the unresolved list, try to auto-match and return there
+  if (_returnToUnresolved) {
+    _returnToUnresolved = false;
+    // Auto-match: assign the new vendor to unresolved devices whose manufacturer matches the vendor name
+    if (!id) _autoMatchVendor(newVendorId, data.name);
+    showUnresolvedDevices();
+  } else {
+    // Re-render whichever view is active
+    if (typeof renderVendorPage === 'function' && document.getElementById('vendor-list-area')) renderVendorPage();
+    if (typeof renderDashboard === 'function' && typeof getProject === 'function' && getProject()) renderDashboard();
+  }
   toast(id?'Vendor updated':'Vendor added','success');
+}
+
+function _autoMatchVendor(vendorId, vendorName) {
+  if (!vendorName) return;
+  const vLower = vendorName.toLowerCase().trim();
+  let matched = 0;
+  state.projects.forEach(p => {
+    (p.devices||[]).forEach(d => {
+      if (!_isVendorMissing(d.vendorId)) return; // already has a vendor
+      // Match if manufacturer contains the vendor name or vice versa
+      const mfr = (d.manufacturer||'').toLowerCase().trim();
+      if (mfr && (mfr.includes(vLower) || vLower.includes(mfr))) {
+        d.vendorId = vendorId;
+        matched++;
+      }
+    });
+  });
+  if (matched > 0) {
+    save();
+    toast(`Auto-assigned ${matched} device${matched!==1?'s':''} matching "${vendorName}"`, 'success');
+  }
 }
 
 function deleteVendor(id) {
@@ -160,21 +206,29 @@ function showUnresolvedDevices() {
   state.projects.forEach(p => {
     (p.devices||[]).forEach(d => {
       if (_isVendorMissing(d.vendorId)) {
-        rows.push({ project: p.name, device: d.name, type: d.deviceType||'', ip: d.ip||'', id: d.id, pid: p.id });
+        rows.push({ project: p.name, device: d.name, type: d.deviceType||'', ip: d.ip||'', manufacturer: d.manufacturer||'', id: d.id, pid: p.id });
       }
     });
   });
-  if (rows.length === 0) return toast('All devices have vendors assigned','success');
+  if (rows.length === 0) {
+    toast('All devices have vendors assigned','success');
+    if (typeof renderVendorPage === 'function') renderVendorPage();
+    return;
+  }
 
   const vendorOpts = state.globalVendors.map(v=>`<option value="${v.id}">${esc(v.name)} (${esc(v.type||'')})</option>`).join('');
+  const hasVendors = state.globalVendors.length > 0;
 
   openModal(`
-    <h3>⚠ Devices Without Vendor (${rows.length})</h3>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Select a vendor for each device, or use "Assign All" to bulk-assign.</div>
-    ${state.globalVendors.length > 0 ? `
+    <h3 style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <span>⚠ Devices Without Vendor (${rows.length})</span>
+      <button class="btn btn-primary btn-sm" onclick="addVendorFromUnresolved()">+ Add Vendor</button>
+    </h3>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Assign an existing vendor to each device, or click <strong>Add Vendor</strong> to create a new one.</div>
+    ${hasVendors ? `
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:8px 10px;background:var(--panel);border:1px solid var(--border);border-radius:6px">
       <label style="font-size:11px;white-space:nowrap;color:var(--text2)">Bulk assign:</label>
-      <select class="form-control" id="bulk-vendor-select" style="flex:1;font-size:12px"><option value="">— Choose —</option>${vendorOpts}</select>
+      <select class="form-control" id="bulk-vendor-select" style="flex:1;font-size:12px"><option value="">— Choose Vendor —</option>${vendorOpts}</select>
       <button class="btn btn-primary btn-sm" onclick="bulkAssignVendor()">Assign All</button>
     </div>` : ''}
     <div style="max-height:400px;overflow-y:auto">
@@ -183,24 +237,26 @@ function showUnresolvedDevices() {
           <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)">Project</th>
           <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)">Device</th>
           <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)">Type</th>
+          <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)">Manufacturer</th>
           <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border)">IP</th>
-          <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);min-width:140px">Vendor</th>
+          <th style="text-align:left;padding:6px 8px;border-bottom:1px solid var(--border);min-width:140px">Assign Vendor</th>
         </tr></thead>
         <tbody>
-          ${rows.map((r,i)=>`<tr style="border-bottom:1px solid var(--border)">
+          ${rows.map(r=>`<tr style="border-bottom:1px solid var(--border)">
             <td style="padding:6px 8px;color:var(--text2)">${esc(r.project)}</td>
             <td style="padding:6px 8px;font-weight:600">${esc(r.device)}</td>
             <td style="padding:6px 8px">${esc(r.type)}</td>
+            <td style="padding:6px 8px;font-size:10px;color:var(--text2)">${esc(r.manufacturer||'—')}</td>
             <td style="padding:6px 8px;font-family:var(--mono)">${esc(r.ip||'—')}</td>
-            <td style="padding:6px 8px"><select class="form-control unres-vendor" data-pid="${r.pid}" data-did="${r.id}" style="font-size:11px;padding:3px 6px"><option value="">—</option>${vendorOpts}</select></td>
+            <td style="padding:6px 8px">${hasVendors ? `<select class="form-control unres-vendor" data-pid="${r.pid}" data-did="${r.id}" style="font-size:11px;padding:3px 6px"><option value="">—</option>${vendorOpts}</select>` : `<span style="font-size:10px;color:var(--text3)">No vendors yet</span>`}</td>
           </tr>`).join('')}
         </tbody>
       </table>
     </div>
     <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
-      <button class="btn btn-primary" onclick="saveUnresolvedVendors()">Save Assignments</button>
-    </div>`, '720px');
+      <button class="btn btn-ghost" onclick="closeModal();if(typeof renderVendorPage==='function')renderVendorPage()">Close</button>
+      ${hasVendors ? `<button class="btn btn-primary" onclick="saveUnresolvedVendors()">Save Assignments</button>` : ''}
+    </div>`, '780px');
 }
 
 function bulkAssignVendor() {
