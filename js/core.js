@@ -84,6 +84,7 @@ function migrateDevice(d) {
   if (d.warrantyExpiry === undefined) d.warrantyExpiry = '';
   if (d.eolDate === undefined) d.eolDate = '';
   if (!d.addedDate) d.addedDate = '';
+  if (d.vendorId === undefined) d.vendorId = '';
   return d;
 }
 
@@ -104,7 +105,8 @@ let state = {
   deviceStatusFilter: 'all',
   cableTypeFilter: 'all',
   cableRoomFilter: '',
-  driveIndex: []
+  driveIndex: [],
+  globalVendors: []
 };
 
 function migrateProject(p) {
@@ -272,6 +274,7 @@ function save() {
   Promise.all(state.projects.map(p => _idbSaveProject(p)))
     .catch(e => console.warn('IDB save error:', e));
   _idbSaveConfig('typeColors', state.typeColors).catch(() => {});
+  _idbSaveConfig('globalVendors', state.globalVendors).catch(() => {});
 
   // Secondary: try localStorage as a quick fallback (may fail if full)
   try {
@@ -336,6 +339,7 @@ function globalSave() {
     const bundle = {
       _netrack_version: 2,
       typeColors: state.typeColors || {},
+      globalVendors: state.globalVendors || [],
       project: p
     };
     const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
@@ -398,10 +402,45 @@ async function load() {
   }
   // Load Drive project index (lightweight metadata)
   try { state.driveIndex = (await _idbGetConfig('driveIndex')) || []; } catch(e) {}
+  // Load global vendors
+  try { state.globalVendors = (await _idbGetConfig('globalVendors')) || []; } catch(e) {}
+  // Migrate per-project vendors → global (one-time)
+  _migrateProjectVendorsToGlobal();
 }
 
 function getProject() {
   return state.projects.find(p => p.id === state.currentProjectId);
+}
+
+// ─── Global Vendors ───
+function saveGlobalVendors() {
+  _idbSaveConfig('globalVendors', state.globalVendors).catch(() => {});
+  try { localStorage.setItem('netrack_globalVendors', JSON.stringify(state.globalVendors)); } catch(e) {}
+}
+
+function _migrateProjectVendorsToGlobal() {
+  let migrated = false;
+  const existingNames = new Set(state.globalVendors.map(v => (v.name||'').toLowerCase()));
+  state.projects.forEach(p => {
+    if (!p.vendors || p.vendors.length === 0) return;
+    p.vendors.forEach(v => {
+      const key = (v.name||'').toLowerCase();
+      if (key && !existingNames.has(key)) {
+        state.globalVendors.push({ ...v });
+        existingNames.add(key);
+        migrated = true;
+      }
+    });
+    p.vendors = []; // clear per-project vendors after migration
+  });
+  if (migrated) {
+    saveGlobalVendors();
+    Promise.all(state.projects.map(p => _idbSaveProject(p))).catch(() => {});
+  }
+}
+
+function getVendorById(id) {
+  return state.globalVendors.find(v => v.id === id);
 }
 
 // ─── IndexedDB helpers for persisting FileSystemDirectoryHandle ───
@@ -499,7 +538,7 @@ async function backupProjectToAgent(p, silent = true) {
   const cfg = loadBackupConfig();
   const mode = cfg.mode || 'local-fs';
   if (mode === 'none') return;
-  const bundle = { _netrack_version: 2, typeColors: state.typeColors, project: p };
+  const bundle = { _netrack_version: 2, typeColors: state.typeColors, globalVendors: state.globalVendors || [], project: p };
   try {
     if (mode === 'local-fs') {
       await fsaWriteProject(p, bundle, silent);
@@ -884,6 +923,7 @@ function exportData() {
   const bundle = {
     _netrack_version: 2,
     typeColors: state.typeColors || {},
+    globalVendors: state.globalVendors || [],
     project: p
   };
   const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: 'application/json' });
@@ -904,12 +944,13 @@ function handleImport(e) {
   const file = e.target.files[0]; if (!file) return;
   const reader = new FileReader();
   reader.onload = (ev) => {
-    let p = null, importedColors = null;
+    let p = null, importedColors = null, importedVendors = null;
     try {
       let parsed = JSON.parse(ev.target.result);
       if (parsed._netrack_version === 2 && parsed.project) {
         p = parsed.project;
         importedColors = parsed.typeColors;
+        importedVendors = parsed.globalVendors;
       } else if (parsed.id && parsed.name) {
         p = parsed;
       } else {
@@ -931,6 +972,18 @@ function handleImport(e) {
     }
     if (importedColors) {
       state.typeColors = Object.assign({}, importedColors, state.typeColors);
+    }
+    // Merge imported global vendors (deduplicate by name)
+    if (importedVendors && importedVendors.length > 0) {
+      const existingNames = new Set(state.globalVendors.map(v => (v.name||'').toLowerCase()));
+      importedVendors.forEach(v => {
+        const key = (v.name||'').toLowerCase();
+        if (key && !existingNames.has(key)) {
+          state.globalVendors.push({ ...v });
+          existingNames.add(key);
+        }
+      });
+      saveGlobalVendors();
     }
     save();
     if (typeof renderProjects === 'function') renderProjects();

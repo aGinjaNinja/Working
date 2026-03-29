@@ -34,7 +34,7 @@ function printSiteReport() {
       </tbody></table>`;
   }).join('');
 
-  const vendorRows = (p.vendors||[]).map(v=>`<tr>
+  const vendorRows = (state.globalVendors||[]).map(v=>`<tr>
     <td>${esc(v.type||'')}</td><td>${esc(v.name||'')}</td><td>${esc(v.accountNum||'—')}</td>
     <td>${esc(v.circuitId||'—')}</td><td>${esc(v.supportPhone||'')} ${esc(v.supportEmail||'')}</td>
   </tr>`).join('');
@@ -63,7 +63,7 @@ function printSiteReport() {
     ${p.racks.length>0?rackSections:'<p>No racks.</p>'}
 
     <h2>3. Vendors &amp; Contracts</h2>
-    ${(p.vendors||[]).length>0?`<table><thead><tr><th>Type</th><th>Name</th><th>Account #</th><th>Circuit ID</th><th>Support</th></tr></thead><tbody>${vendorRows}</tbody></table>`:'<p>No vendors.</p>'}
+    ${(state.globalVendors||[]).length>0?`<table><thead><tr><th>Type</th><th>Name</th><th>Account #</th><th>Circuit ID</th><th>Support</th></tr></thead><tbody>${vendorRows}</tbody></table>`:'<p>No vendors.</p>'}
 
     <h2>4. Site Notes</h2>
     ${(p.siteNotes||[]).length>0?notesList:'<p>No site notes.</p>'}

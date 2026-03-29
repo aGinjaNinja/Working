@@ -86,7 +86,7 @@ async function gdriveSave() {
     try {
       const folderId = await _getOrCreateDriveFolder();
       const fileName = p.name.replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_') + '_netrack.json';
-      const content  = JSON.stringify({ _netrack_version: 2, typeColors: state.typeColors || {}, project: p }, null, 2);
+      const content  = JSON.stringify({ _netrack_version: 2, typeColors: state.typeColors || {}, globalVendors: state.globalVendors || [], project: p }, null, 2);
       const q = encodeURIComponent(`name='${fileName}' and '${folderId}' in parents and trashed=false`);
       const search = await _driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`);
       const { files } = await search.json();
@@ -123,7 +123,7 @@ async function gdriveSaveAll() {
       for (const p of state.projects) {
         try {
           const fileName = p.name.replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_') + '_netrack.json';
-          const content = JSON.stringify({ _netrack_version: 2, typeColors: state.typeColors || {}, project: p }, null, 2);
+          const content = JSON.stringify({ _netrack_version: 2, typeColors: state.typeColors || {}, globalVendors: state.globalVendors || [], project: p }, null, 2);
           const q = encodeURIComponent(`name='${fileName}' and '${folderId}' in parents and trashed=false`);
           const search = await _driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`);
           const { files } = await search.json();
@@ -225,10 +225,10 @@ async function openDriveProject(driveFileId) {
     toast('☁ Downloading project…');
     const r = await _driveFetch(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`);
     const text = await r.text();
-    let p = null, importedColors = null;
+    let p = null, importedColors = null, importedVendors = null;
     const parsed = JSON.parse(text);
     if (parsed._netrack_version === 2 && parsed.project) {
-      p = parsed.project; importedColors = parsed.typeColors;
+      p = parsed.project; importedColors = parsed.typeColors; importedVendors = parsed.globalVendors;
     } else if (parsed.id && parsed.name) {
       p = parsed;
     } else { throw new Error('Unrecognised file format'); }
@@ -241,6 +241,11 @@ async function openDriveProject(driveFileId) {
     if (importedColors) {
       state.typeColors = Object.assign({}, importedColors, state.typeColors);
       _idbSaveConfig('typeColors', state.typeColors).catch(() => {});
+    }
+    if (importedVendors && importedVendors.length > 0) {
+      const existingNames = new Set(state.globalVendors.map(v => (v.name||'').toLowerCase()));
+      importedVendors.forEach(v => { const k=(v.name||'').toLowerCase(); if(k&&!existingNames.has(k)){state.globalVendors.push({...v});existingNames.add(k);} });
+      saveGlobalVendors();
     }
     // Remove from drive index — it's now a local project
     state.driveIndex = state.driveIndex.filter(e => e.driveFileId !== driveFileId);
@@ -257,10 +262,10 @@ async function gdriveImportFile(fileId, fileName) {
     toast('☁ Downloading project…');
     const r = await _driveFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
     const text = await r.text();
-    let p = null, importedColors = null;
+    let p = null, importedColors = null, importedVendors = null;
     const parsed = JSON.parse(text);
     if (parsed._netrack_version === 2 && parsed.project) {
-      p = parsed.project; importedColors = parsed.typeColors;
+      p = parsed.project; importedColors = parsed.typeColors; importedVendors = parsed.globalVendors;
     } else if (parsed.id && parsed.name) {
       p = parsed;
     } else { throw new Error('Unrecognised file format'); }
@@ -275,6 +280,11 @@ async function gdriveImportFile(fileId, fileName) {
     if (importedColors) {
       state.typeColors = Object.assign({}, importedColors, state.typeColors);
       _idbSaveConfig('typeColors', state.typeColors).catch(() => {});
+    }
+    if (importedVendors && importedVendors.length > 0) {
+      const existingNames = new Set(state.globalVendors.map(v => (v.name||'').toLowerCase()));
+      importedVendors.forEach(v => { const k=(v.name||'').toLowerCase(); if(k&&!existingNames.has(k)){state.globalVendors.push({...v});existingNames.add(k);} });
+      saveGlobalVendors();
     }
     save();
     closeModal();

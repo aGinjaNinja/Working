@@ -19,8 +19,8 @@ function renderDashboard() {
   const cl = p.checklist||[];
   const clDone = cl.filter(i=>i.done).length;
   const clPct = cl.length>0 ? Math.round(clDone/cl.length*100) : 0;
-  // Vendors
-  const vendors = p.vendors||[];
+  // Vendors (global)
+  const vendors = state.globalVendors||[];
   // Time log
   const timeLog = p.timeLog||[];
   const totalMins = timeLog.reduce((s,e)=>{
