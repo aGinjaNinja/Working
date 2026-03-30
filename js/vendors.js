@@ -122,38 +122,17 @@ function _isDeviceMissingVendor(d) {
   return true;
 }
 
-function openVendorModal(id, prefillOUI) {
+function openVendorModal(id) {
   const v = id ? state.globalVendors.find(x=>x.id===id) : null;
   const isNew = !v;
-  const typeOpts = VENDOR_TYPES.map(t=>`<option value="${t}" ${(v?.type||'Vendor')===t?'selected':''}>${t}</option>`).join('');
-  const prefillName = prefillOUI ? 'OUI ' + prefillOUI : '';
   openModal(`
     <h3>${isNew?'Add Manufacturer':'Edit Manufacturer'}</h3>
-    ${prefillOUI ? `<div style="font-size:11px;color:var(--accent);margin-bottom:10px;padding:6px 10px;background:rgba(0,200,255,.08);border:1px solid rgba(0,200,255,.2);border-radius:5px">MAC prefix: <strong style="font-family:var(--mono)">${esc(prefillOUI)}</strong> — after saving, all devices sharing this prefix will be auto-assigned.</div>` : ''}
-    <div class="form-row-inline">
-      <div class="form-row" style="flex:2"><label>Manufacturer Name *</label>
-        <input class="form-control" id="v-name" value="${esc(v?.name||prefillName)}" placeholder="Cisco, Comcast Business, etc."></div>
-      <div class="form-row"><label>Type</label>
-        <select class="form-control" id="v-type">${typeOpts}</select></div>
-    </div>
-    <div class="form-row-inline">
-      <div class="form-row"><label>Account #</label>
-        <input class="form-control" id="v-acct" value="${esc(v?.accountNum||'')}" placeholder="ACC-123456"></div>
-      <div class="form-row"><label>Circuit ID</label>
-        <input class="form-control" id="v-circuit" value="${esc(v?.circuitId||'')}" placeholder="CKT-XXXX"></div>
-    </div>
-    <div class="form-row-inline">
-      <div class="form-row"><label>Support Phone</label>
-        <input class="form-control" id="v-phone" value="${esc(v?.supportPhone||'')}" placeholder="1-800-XXX-XXXX"></div>
-      <div class="form-row"><label>Support Email</label>
-        <input class="form-control" id="v-email" value="${esc(v?.supportEmail||'')}" placeholder="support@vendor.com"></div>
-    </div>
-    <div class="form-row"><label>Notes</label>
-      <textarea class="form-control" id="v-notes" rows="2" placeholder="Contract terms, SLA, etc.">${esc(v?.notes||'')}</textarea></div>
+    <div class="form-row"><label>Manufacturer Name</label>
+      <input class="form-control" id="v-name" value="${esc(v?.name||'')}" placeholder="e.g. Cisco, Ubiquiti, Ruckus" autofocus></div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="_cancelVendorModal()">Cancel</button>
       <button class="btn btn-primary" onclick="saveVendor('${id||''}')">Save</button>
-    </div>`, '520px');
+    </div>`, '400px');
   setTimeout(()=>{
     const el = document.getElementById('v-name');
     if (el) { el.focus(); el.select(); }
@@ -171,14 +150,7 @@ function _cancelVendorModal() {
 function saveVendor(id) {
   const name = document.getElementById('v-name')?.value?.trim();
   if (!name) return toast('Manufacturer name is required','error');
-  const data = {
-    name, type: document.getElementById('v-type')?.value||'Vendor',
-    accountNum: document.getElementById('v-acct')?.value?.trim()||'',
-    circuitId: document.getElementById('v-circuit')?.value?.trim()||'',
-    supportPhone: document.getElementById('v-phone')?.value?.trim()||'',
-    supportEmail: document.getElementById('v-email')?.value?.trim()||'',
-    notes: document.getElementById('v-notes')?.value?.trim()||'',
-  };
+  const data = { name };
   let newVendorId = id;
   if (id) {
     const idx = state.globalVendors.findIndex(v=>v.id===id);
@@ -271,11 +243,19 @@ function renderVendorPage() {
   _autoResolveByOUI();
   const vendors = state.globalVendors || [];
 
+  // Sort by name
+  vendors.sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
+
   const usageCounts = {};
-  vendors.forEach(v => { usageCounts[v.id] = 0; });
+  const ouiPrefixes = {};
+  vendors.forEach(v => { usageCounts[v.id] = 0; ouiPrefixes[v.id] = new Set(); });
   state.projects.forEach(p => {
     (p.devices||[]).forEach(d => {
-      if (d.vendorId && usageCounts[d.vendorId] !== undefined) usageCounts[d.vendorId]++;
+      if (d.vendorId && usageCounts[d.vendorId] !== undefined) {
+        usageCounts[d.vendorId]++;
+        const oui = _extractOUI(d.mac);
+        if (oui) ouiPrefixes[d.vendorId].add(oui);
+      }
     });
   });
 
@@ -306,21 +286,15 @@ function renderVendorPage() {
       <div style="overflow-x:auto">
         <table style="width:100%;font-size:12px;border-collapse:collapse">
           <thead><tr>
-            <th style="text-align:left;padding:8px 10px;border-bottom:2px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--text3)">Type</th>
-            <th style="text-align:left;padding:8px 10px;border-bottom:2px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--text3)">Name</th>
-            <th style="text-align:left;padding:8px 10px;border-bottom:2px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--text3)">Account #</th>
-            <th style="text-align:left;padding:8px 10px;border-bottom:2px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--text3)">Circuit ID</th>
-            <th style="text-align:left;padding:8px 10px;border-bottom:2px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--text3)">Support</th>
+            <th style="text-align:left;padding:8px 10px;border-bottom:2px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--text3)">Company</th>
+            <th style="text-align:left;padding:8px 10px;border-bottom:2px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--text3)">MAC Prefix</th>
             <th style="text-align:left;padding:8px 10px;border-bottom:2px solid var(--border);font-size:10px;text-transform:uppercase;letter-spacing:.8px;color:var(--text3)">Used By</th>
-            <th style="padding:8px 10px;border-bottom:2px solid var(--border);width:60px"></th>
+            <th style="padding:8px 10px;border-bottom:2px solid var(--border);width:80px"></th>
           </tr></thead>
           <tbody>
-            ${vendors.map(v=>`<tr style="border-bottom:1px solid var(--border)">
-              <td style="padding:8px 10px"><span style="background:var(--card);border:1px solid var(--border);border-radius:3px;padding:1px 6px;font-size:10px;font-family:var(--mono)">${esc(v.type||'')}</span></td>
+            ${vendors.map(v=>{const ouis=[...ouiPrefixes[v.id]||[]].sort();return `<tr style="border-bottom:1px solid var(--border)">
               <td style="padding:8px 10px;font-weight:600">${esc(v.name||'')}</td>
-              <td style="padding:8px 10px;font-family:var(--mono);font-size:11px">${esc(v.accountNum||'—')}</td>
-              <td style="padding:8px 10px;font-family:var(--mono);font-size:11px">${esc(v.circuitId||'—')}</td>
-              <td style="padding:8px 10px;font-size:11px">${esc(v.supportPhone||'')}${v.supportPhone&&v.supportEmail?' / ':''}${esc(v.supportEmail||'')}</td>
+              <td style="padding:8px 10px;font-family:var(--mono);font-size:11px;color:var(--accent)">${ouis.length?ouis.join(', '):'<span style="color:var(--text3)">—</span>'}</td>
               <td style="padding:8px 10px;font-size:11px;color:var(--text2)">${usageCounts[v.id]||0} device${(usageCounts[v.id]||0)!==1?'s':''}</td>
               <td style="padding:8px 10px">
                 <div style="display:flex;gap:4px;justify-content:flex-end">
@@ -328,7 +302,7 @@ function renderVendorPage() {
                   <button class="btn btn-danger btn-sm btn-icon" onclick="deleteVendor('${v.id}')" title="Delete">✕</button>
                 </div>
               </td>
-            </tr>`).join('')}
+            </tr>`;}).join('')}
           </tbody>
         </table>
       </div>`}`;
