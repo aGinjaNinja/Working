@@ -285,7 +285,7 @@ async function gdriveLoad() {
           ${files.map(f => {
             const label = f.name.replace(/_netrack\.json$/,'').replace(/_/g,' ');
             const date  = new Date(f.modifiedTime).toLocaleString();
-            const size  = f.size ? (f.size/1024).toFixed(0)+' KB' : '';
+            const size  = f.size ? (f.size >= 1024000 ? (f.size/1048576).toFixed(1)+' MB' : (f.size/1024).toFixed(0)+' KB') : '';
             return `<div onclick="gdriveImportFile('${f.id}','${esc(f.name)}')"
               style="padding:10px 14px;background:var(--card2);border:1px solid var(--border2);border-radius:6px;cursor:pointer;transition:border-color .15s"
               onmouseover="this.style.borderColor='var(--accent)'"
