@@ -10,7 +10,7 @@ function addVendorFromUnresolved(mac, deviceId, projectId) {
   const oui = _extractOUI(mac);
   openModal(`
     <h3>Assign Manufacturer</h3>
-    ${oui ? `<div style="font-size:11px;color:var(--accent);margin-bottom:10px;padding:6px 10px;background:rgba(0,200,255,.08);border:1px solid rgba(0,200,255,.2);border-radius:5px">MAC prefix: <strong style="font-family:var(--mono)">${esc(oui)}</strong> — all devices sharing this prefix will be auto-assigned.</div>` : ''}
+    ${mac ? `<div style="font-size:11px;color:var(--accent);margin-bottom:10px;padding:6px 10px;background:rgba(0,200,255,.08);border:1px solid rgba(0,200,255,.2);border-radius:5px">MAC: <strong style="font-family:var(--mono)">${esc(mac)}</strong>${oui ? ` &nbsp;·&nbsp; OUI prefix: <strong style="font-family:var(--mono)">${esc(oui)}</strong> — all devices sharing this prefix will be auto-assigned` : ''}</div>` : ''}
     <div class="form-row"><label>Manufacturer Name</label>
       <input class="form-control" id="unres-mfr-name" placeholder="e.g. Cisco, Ubiquiti, Ruckus" autofocus></div>
     <input type="hidden" id="unres-mfr-mac" value="${esc(mac||'')}">
