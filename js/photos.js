@@ -7,6 +7,61 @@ let _photoLayoutLocked = false;
 let _photoResizeObs = null;
 let _currentPhotoFolderId = 'all'; // 'all' or a folder id
 const SLOT_COLORS = ['#4fc3f7','#81c784','#ffb74d','#f06292','#ce93d8','#80cbc4','#ffcc02','#ff8a65','#a5d6a7','#90caf9'];
+let _viewerPhotoIndices = [];
+
+// ═══════════════════════════════════════════
+//  PHOTO VIEWER (lightbox)
+// ═══════════════════════════════════════════
+function openPhotoViewer(idx) {
+  const p = getProject();
+  const ph = p.photos[idx];
+  if (!ph) return;
+
+  // Use visible indices for prev/next; fall back to all photos
+  const indices = _viewerPhotoIndices.length > 0 ? _viewerPhotoIndices : p.photos.map((_, i) => i);
+  const pos = indices.indexOf(idx);
+  const total = indices.length;
+  const prevIdx = total > 1 ? indices[(pos - 1 + total) % total] : -1;
+  const nextIdx = total > 1 ? indices[(pos + 1) % total] : -1;
+
+  // Remove existing viewer
+  let overlay = document.getElementById('photo-viewer-overlay');
+  if (overlay) overlay.remove();
+
+  overlay = document.createElement('div');
+  overlay.id = 'photo-viewer-overlay';
+  overlay.innerHTML = `
+    <button class="pv-close" onclick="closePhotoViewer()" title="Close">✕</button>
+    ${prevIdx >= 0 ? `<button class="pv-arrow pv-prev" onclick="event.stopPropagation();openPhotoViewer(${prevIdx})" title="Previous">‹</button>` : ''}
+    ${nextIdx >= 0 ? `<button class="pv-arrow pv-next" onclick="event.stopPropagation();openPhotoViewer(${nextIdx})" title="Next">›</button>` : ''}
+    <img class="pv-img" src="${ph.data}" onclick="event.stopPropagation()" style="${ph.rotation ? 'transform:rotate('+ph.rotation+'deg)' : ''}">
+    <div class="pv-bottom">
+      <div class="pv-caption">${esc(ph.caption || ph.name || 'Photo ' + (idx + 1))}</div>
+      <div class="pv-counter">${pos + 1} / ${total}</div>
+      <div class="pv-actions">
+        <button class="btn btn-ghost btn-sm" onclick="closePhotoViewer();openPhotoEditor(${idx})" style="color:#fff;border-color:rgba(255,255,255,.3)">Edit</button>
+      </div>
+    </div>
+  `;
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) closePhotoViewer(); });
+
+  // Keyboard navigation
+  overlay._keyHandler = (e) => {
+    if (e.key === 'Escape') closePhotoViewer();
+    else if (e.key === 'ArrowLeft' && prevIdx >= 0) openPhotoViewer(prevIdx);
+    else if (e.key === 'ArrowRight' && nextIdx >= 0) openPhotoViewer(nextIdx);
+  };
+  document.addEventListener('keydown', overlay._keyHandler);
+
+  document.body.appendChild(overlay);
+}
+
+function closePhotoViewer() {
+  const overlay = document.getElementById('photo-viewer-overlay');
+  if (!overlay) return;
+  if (overlay._keyHandler) document.removeEventListener('keydown', overlay._keyHandler);
+  overlay.remove();
+}
 
 function renderPhotos() {
   if (_photoResizeObs) { _photoResizeObs.disconnect(); _photoResizeObs = null; }
@@ -92,13 +147,14 @@ function renderPhotos() {
         </label>
       </div>`;
   } else {
+    _viewerPhotoIndices = visiblePhotos.map(({ idx }) => idx);
     const grid = visiblePhotos.map(({ ph, idx }) => {
       const assigned = (ph.assignments||[]).filter(a=>a&&a.itemId).length;
       const folderObj = ph.folderId ? p.photoFolders.find(f => f.id === ph.folderId) : null;
       const folderBadge = folderObj && _currentPhotoFolderId === 'all'
         ? `<div class="photo-folder-badge">📁 ${esc(folderObj.name)}</div>` : '';
       return `
-      <div class="photo-card" onclick="openPhotoEditor(${idx})">
+      <div class="photo-card" onclick="openPhotoViewer(${idx})">
         <div class="photo-thumb" style="background-image:url('${ph.data}')${ph.rotation ? ';transform:rotate('+ph.rotation+'deg)' : ''}"></div>
         <div class="photo-meta">
           <div class="photo-title">${esc(ph.caption || ph.name || 'Photo ' + (idx+1))}</div>

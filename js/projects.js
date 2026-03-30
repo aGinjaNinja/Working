@@ -1,54 +1,269 @@
+// ── Helper: create a local project card ──
+function _createProjectCard(p) {
+  const devCount = p.devices.length;
+  const rackCount = p.racks.length;
+  const photoCount = (p.photos||[]).length;
+  const bytes = new Blob([JSON.stringify(p)]).size;
+  const sizeStr = bytes >= 1024000 ? (bytes/1048576).toFixed(1)+' MB' : (bytes/1024).toFixed(0)+' KB';
+  const div = document.createElement('div');
+  div.className = 'proj-card';
+  div.innerHTML = `
+    <button class="pmove" title="Move to folder" onclick="moveProjectToFolder('${p.id}', event)">📁</button>
+    <button class="pdel" title="Delete project" onclick="deleteProject('${p.id}', event)">✕</button>
+    <div class="pname">${esc(p.name)}</div>
+    <div class="pmeta"><span>${devCount}</span> devices &nbsp;·&nbsp; <span>${rackCount}</span> racks &nbsp;·&nbsp; <span>${photoCount}</span> photos</div>
+    <div class="pmeta" style="margin-top:4px;color:var(--text3);">${p.created || 'Project'} &nbsp;·&nbsp; ${sizeStr}</div>
+  `;
+  div.addEventListener('click', () => openProject(p.id));
+  return div;
+}
+
+// ── Helper: create a Drive-only project card ──
+function _createDriveCard(d) {
+  const div = document.createElement('div');
+  div.className = 'proj-card';
+  div.style.borderColor = 'rgba(66,133,244,.3)';
+  div.innerHTML = `
+    <div style="position:absolute;top:8px;right:8px;font-size:10px;color:#4285f4;font-family:var(--mono);background:rgba(66,133,244,.1);border:1px solid rgba(66,133,244,.3);border-radius:4px;padding:1px 6px">☁ Drive</div>
+    <div class="pname">${esc(d.name)}</div>
+    <div class="pmeta" style="color:#4285f4">Click to download &amp; open</div>
+    <div class="pmeta" style="margin-top:4px;font-size:10px;color:var(--text2)">${d.devices||0} devices &middot; ${d.racks||0} racks &middot; ${d.photos||0} photos</div>
+    <div class="pmeta" style="margin-top:4px;color:var(--text3);font-size:10px">${d.modifiedTime ? new Date(d.modifiedTime).toLocaleDateString() : ''}${d.size ? ' &middot; ' + (d.size >= 1024000 ? (d.size/1048576).toFixed(1)+' MB' : (d.size/1024).toFixed(0)+' KB') : ''}</div>
+  `;
+  div.addEventListener('click', () => openDriveProject(d.driveFileId));
+  return div;
+}
+
+// ── Helper: create a "+ New Project" card ──
+function _createNewProjectCard(folderId) {
+  const np = document.createElement('div');
+  np.className = 'proj-new';
+  np.innerHTML = `<span style="font-size:20px;color:var(--accent)">+</span> New Project`;
+  np.onclick = () => newProject(folderId || '');
+  return np;
+}
+
+// ═══════════════════════════════════════════
+//  RENDER PROJECTS — grouped by folder
+// ═══════════════════════════════════════════
 function renderProjects() {
   const g = document.getElementById('proj-grid');
   g.innerHTML = '';
 
-  // Local projects (full data in IDB)
+  const folders = state.projectFolders || [];
+  const hasFolders = folders.length > 0;
+
+  // Build folderId → project[] map
+  const folderProjects = {};
+  const unfiled = [];
   state.projects.forEach(p => {
-    const devCount = p.devices.length;
-    const rackCount = p.racks.length;
-    const photoCount = (p.photos||[]).length;
-    const div = document.createElement('div');
-    div.className = 'proj-card';
-    div.innerHTML = `
-      <button class="pdel" title="Delete project" onclick="deleteProject('${p.id}', event)">✕</button>
-      <div class="pname">${esc(p.name)}</div>
-      <div class="pmeta"><span>${devCount}</span> devices &nbsp;·&nbsp; <span>${rackCount}</span> racks &nbsp;·&nbsp; <span>${photoCount}</span> photos</div>
-      <div class="pmeta" style="margin-top:4px;color:var(--text3);">${p.created || 'Project'}</div>
-    `;
-    div.addEventListener('click', () => openProject(p.id));
-    g.appendChild(div);
+    if (p.folderId && folders.find(f => f.id === p.folderId)) {
+      if (!folderProjects[p.folderId]) folderProjects[p.folderId] = [];
+      folderProjects[p.folderId].push(p);
+    } else {
+      unfiled.push(p);
+    }
   });
 
-  // Drive-only projects (metadata stubs — no data downloaded yet)
+  // ── "+ New Folder" link at top (only when folders exist or there are projects) ──
+  if (state.projects.length > 0 || hasFolders) {
+    const topBar = document.createElement('div');
+    topBar.style.cssText = 'display:flex;justify-content:flex-end;margin-bottom:8px';
+    topBar.innerHTML = `<button class="btn btn-ghost btn-sm" onclick="newFolder()" style="font-size:12px;padding:4px 10px">+ New Folder</button>`;
+    g.appendChild(topBar);
+  }
+
+  // ── Render each folder ──
+  folders.forEach(folder => {
+    const projects = folderProjects[folder.id] || [];
+    const folderEl = document.createElement('div');
+    folderEl.className = 'proj-folder';
+
+    const header = document.createElement('div');
+    header.className = 'proj-folder-header';
+    header.innerHTML = `
+      <div class="proj-folder-toggle" onclick="toggleFolder('${folder.id}')">${folder.collapsed ? '▶' : '▼'}</div>
+      <div class="proj-folder-name" onclick="toggleFolder('${folder.id}')">${esc(folder.name)}</div>
+      <div class="proj-folder-count">${projects.length} project${projects.length !== 1 ? 's' : ''}</div>
+      <button class="proj-folder-action" onclick="renameFolder('${folder.id}')" title="Rename folder">✎</button>
+      <button class="proj-folder-action" onclick="deleteFolder('${folder.id}')" title="Delete folder">✕</button>
+    `;
+    folderEl.appendChild(header);
+
+    if (!folder.collapsed) {
+      const grid = document.createElement('div');
+      grid.className = 'proj-inner-grid';
+      projects.forEach(p => grid.appendChild(_createProjectCard(p)));
+      grid.appendChild(_createNewProjectCard(folder.id));
+      folderEl.appendChild(grid);
+    }
+
+    g.appendChild(folderEl);
+  });
+
+  // ── Unfiled local projects ──
+  if (unfiled.length > 0 || !hasFolders) {
+    if (hasFolders) {
+      const header = document.createElement('div');
+      header.className = 'proj-folder-header';
+      header.innerHTML = `
+        <div class="proj-folder-name" style="color:var(--text2)">Unfiled Projects</div>
+        <div class="proj-folder-count">${unfiled.length}</div>
+      `;
+      g.appendChild(header);
+    }
+    const grid = document.createElement('div');
+    grid.className = 'proj-inner-grid';
+    unfiled.forEach(p => grid.appendChild(_createProjectCard(p)));
+    grid.appendChild(_createNewProjectCard(''));
+    g.appendChild(grid);
+  }
+
+  // ── Drive-only projects ──
   const localNames = new Set(state.projects.map(p => p.name));
   const driveOnly = (state.driveIndex || []).filter(d => !localNames.has(d.name));
-  driveOnly.forEach(d => {
-    const div = document.createElement('div');
-    div.className = 'proj-card';
-    div.style.borderColor = 'rgba(66,133,244,.3)';
-    div.innerHTML = `
-      <div style="position:absolute;top:8px;right:8px;font-size:10px;color:#4285f4;font-family:var(--mono);background:rgba(66,133,244,.1);border:1px solid rgba(66,133,244,.3);border-radius:4px;padding:1px 6px">☁ Drive</div>
-      <div class="pname">${esc(d.name)}</div>
-      <div class="pmeta" style="color:#4285f4">Click to download &amp; open</div>
-      <div class="pmeta" style="margin-top:4px;font-size:10px;color:var(--text2)">${d.devices||0} devices &middot; ${d.racks||0} racks &middot; ${d.photos||0} photos</div>
-      <div class="pmeta" style="margin-top:4px;color:var(--text3);font-size:10px">${d.modifiedTime ? new Date(d.modifiedTime).toLocaleDateString() : ''}${d.size ? ' &middot; ' + (d.size >= 1024000 ? (d.size/1048576).toFixed(1)+' MB' : (d.size/1024).toFixed(0)+' KB') : ''}</div>
+  if (driveOnly.length > 0) {
+    const header = document.createElement('div');
+    header.className = 'proj-folder-header';
+    header.innerHTML = `
+      <div class="proj-folder-name" style="color:#4285f4">☁ Google Drive</div>
+      <div class="proj-folder-count">${driveOnly.length}</div>
     `;
-    div.addEventListener('click', () => openDriveProject(d.driveFileId));
-    g.appendChild(div);
-  });
-
-  const np = document.createElement('div');
-  np.className = 'proj-new';
-  np.innerHTML = `<span style="font-size:20px;color:var(--accent)">+</span> New Project`;
-  np.onclick = newProject;
-  g.appendChild(np);
+    g.appendChild(header);
+    const grid = document.createElement('div');
+    grid.className = 'proj-inner-grid';
+    driveOnly.forEach(d => grid.appendChild(_createDriveCard(d)));
+    g.appendChild(grid);
+  }
 }
 
-function newProject() {
+// ═══════════════════════════════════════════
+//  FOLDER MANAGEMENT
+// ═══════════════════════════════════════════
+function _saveProjectFolders() {
+  _idbSaveConfig('projectFolders', state.projectFolders || []).catch(() => {});
+}
+
+function newFolder() {
+  openModal(`
+    <h3>New Folder</h3>
+    <div class="form-row"><label>Client / Company Name</label>
+      <input class="form-control" id="pf-name" placeholder="e.g. Acme Corporation" autofocus></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="createFolder()">Create</button>
+    </div>
+  `);
+  setTimeout(() => document.getElementById('pf-name')?.focus(), 50);
+}
+
+function createFolder() {
+  const name = document.getElementById('pf-name')?.value?.trim();
+  if (!name) return toast('Enter a folder name', 'error');
+  if (!state.projectFolders) state.projectFolders = [];
+  state.projectFolders.push({ id: genId(), name, collapsed: false });
+  _saveProjectFolders();
+  closeModal();
+  renderProjects();
+  toast('Folder created');
+}
+
+function toggleFolder(id) {
+  const f = (state.projectFolders || []).find(f => f.id === id);
+  if (f) { f.collapsed = !f.collapsed; _saveProjectFolders(); renderProjects(); }
+}
+
+function renameFolder(id) {
+  const f = (state.projectFolders || []).find(f => f.id === id);
+  if (!f) return;
+  openModal(`
+    <h3>Rename Folder</h3>
+    <div class="form-row"><label>Folder Name</label>
+      <input class="form-control" id="pf-rename" value="${esc(f.name)}" autofocus></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="confirmRenameFolder('${id}')">Save</button>
+    </div>
+  `);
+  setTimeout(() => { const el = document.getElementById('pf-rename'); el?.focus(); el?.select(); }, 50);
+}
+
+function confirmRenameFolder(id) {
+  const f = (state.projectFolders || []).find(f => f.id === id);
+  if (!f) return;
+  const name = document.getElementById('pf-rename')?.value?.trim();
+  if (!name) return toast('Enter a folder name', 'error');
+  f.name = name;
+  _saveProjectFolders();
+  closeModal();
+  renderProjects();
+}
+
+function deleteFolder(id) {
+  const f = (state.projectFolders || []).find(f => f.id === id);
+  if (!f) return;
+  state.projects.forEach(p => { if (p.folderId === id) p.folderId = ''; });
+  state.projectFolders = state.projectFolders.filter(x => x.id !== id);
+  _saveProjectFolders();
+  save();
+  renderProjects();
+  toast('Folder removed — projects moved to Unfiled');
+}
+
+function moveProjectToFolder(projectId, e) {
+  e.stopPropagation();
+  const folders = state.projectFolders || [];
+  const p = state.projects.find(x => x.id === projectId);
+  if (!p) return;
+  const options = folders.map(f =>
+    `<div onclick="confirmMoveProject('${projectId}','${f.id}')" style="padding:10px 14px;cursor:pointer;border-radius:6px;transition:background .15s${p.folderId === f.id ? ';color:var(--accent);font-weight:600' : ''}" onmouseover="this.style.background='var(--card2)'" onmouseout="this.style.background=''">
+      ${p.folderId === f.id ? '✓ ' : '&nbsp;&nbsp;&nbsp;'}${esc(f.name)}
+    </div>`
+  ).join('');
+  openModal(`
+    <h3>Move to Folder</h3>
+    <p style="font-size:12px;color:var(--text3);margin-bottom:10px">${esc(p.name)}</p>
+    <div style="display:flex;flex-direction:column;gap:2px;max-height:40vh;overflow-y:auto">
+      <div onclick="confirmMoveProject('${projectId}','')" style="padding:10px 14px;cursor:pointer;border-radius:6px;transition:background .15s${!p.folderId ? ';color:var(--accent);font-weight:600' : ''}" onmouseover="this.style.background='var(--card2)'" onmouseout="this.style.background=''">
+        ${!p.folderId ? '✓ ' : '&nbsp;&nbsp;&nbsp;'}Unfiled
+      </div>
+      ${options}
+    </div>
+    <div style="border-top:1px solid var(--border);margin-top:10px;padding-top:10px">
+      <button class="btn btn-ghost btn-sm" onclick="closeModal();newFolder()">+ New Folder</button>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+    </div>
+  `);
+}
+
+function confirmMoveProject(projectId, folderId) {
+  const p = state.projects.find(x => x.id === projectId);
+  if (!p) return;
+  p.folderId = folderId;
+  save();
+  closeModal();
+  renderProjects();
+}
+
+// ═══════════════════════════════════════════
+//  PROJECT CRUD
+// ═══════════════════════════════════════════
+function newProject(preselectedFolderId) {
+  const folders = state.projectFolders || [];
+  const folderSelect = folders.length > 0 ? `
+    <div class="form-row"><label>Folder</label>
+      <select class="form-control" id="pn-folder">
+        <option value="">— No Folder —</option>
+        ${folders.map(f => `<option value="${f.id}"${f.id === preselectedFolderId ? ' selected' : ''}>${esc(f.name)}</option>`).join('')}
+      </select>
+    </div>` : '';
   openModal(`
     <h3>New Project</h3>
     <div class="form-row"><label>Project Name</label>
       <input class="form-control" id="pn-name" placeholder="e.g. Office Network 2025" autofocus></div>
+    ${folderSelect}
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
       <button class="btn btn-primary" onclick="createProject()">Create</button>
@@ -60,8 +275,9 @@ function newProject() {
 function createProject() {
   const name = document.getElementById('pn-name')?.value?.trim();
   if (!name) return toast('Enter a project name', 'error');
+  const folderId = document.getElementById('pn-folder')?.value || '';
   const p = {
-    id: genId(), name,
+    id: genId(), name, folderId,
     company: '', location: '', contactMgmt: '', contactIT: '',
     created: new Date().toLocaleDateString(),
     devices: [], racks: [], changelog: [], siteNotes: [],
@@ -76,11 +292,11 @@ function createProject() {
   closeModal();
   openProject(p.id);
 }
+
 function deleteProject(id, e) {
   e.stopPropagation();
   const p = state.projects.find(x => x.id === id);
   if (!p) return;
-  // First confirmation
   openModal(`
     <h3 style="color:var(--red)">⚠ Delete Project</h3>
     <p style="margin-bottom:16px;color:var(--text2)">This will permanently delete <strong style="color:#fff">${esc(p.name)}</strong> and all its devices, racks, and data. This cannot be undone.</p>

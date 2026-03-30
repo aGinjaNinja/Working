@@ -106,7 +106,8 @@ let state = {
   cableTypeFilter: 'all',
   cableRoomFilter: '',
   driveIndex: [],
-  globalVendors: []
+  globalVendors: [],
+  projectFolders: []
 };
 
 function migrateProject(p) {
@@ -136,6 +137,7 @@ function migrateProject(p) {
   if (!p.siteMap) p.siteMap = { data: null, markers: [], cableLines: [] };
   if (!p.siteMap.cableLines) p.siteMap.cableLines = [];
   if (!p.customTemplates) p.customTemplates = [];
+  if (p.folderId === undefined) p.folderId = '';
   p.devices.forEach(migrateDevice);
   return p;
 }
@@ -404,6 +406,7 @@ async function load() {
   try { state.driveIndex = (await _idbGetConfig('driveIndex')) || []; } catch(e) {}
   // Load global vendors
   try { state.globalVendors = (await _idbGetConfig('globalVendors')) || []; } catch(e) {}
+  try { state.projectFolders = (await _idbGetConfig('projectFolders')) || []; } catch(e) {}
   // Migrate per-project vendors → global (one-time)
   _migrateProjectVendorsToGlobal();
 }
