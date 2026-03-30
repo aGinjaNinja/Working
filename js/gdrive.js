@@ -172,6 +172,48 @@ async function _gdriveLoadManufacturers(folderId) {
   return matched;
 }
 
+// ── Project folders save/load ─────────────────────────────────────────────────
+const GDRIVE_FOLDERS_FILENAME = 'NetRackManager_folders.json';
+
+async function _gdriveSaveFolders(driveFolderId) {
+  const folders = state.projectFolders || [];
+  const content = JSON.stringify({ _netrack_folders: true, updated: new Date().toISOString(), folders }, null, 2);
+  const q = encodeURIComponent(`name='${GDRIVE_FOLDERS_FILENAME}' and '${driveFolderId}' in parents and trashed=false`);
+  const search = await _driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`);
+  const { files } = await search.json();
+  if (files?.length) {
+    await _driveFetch(`https://www.googleapis.com/upload/drive/v3/files/${files[0].id}?uploadType=media`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: content
+    });
+  } else {
+    const boundary = 'nrf' + Date.now();
+    const meta = JSON.stringify({ name: GDRIVE_FOLDERS_FILENAME, parents: [driveFolderId], mimeType: 'application/json' });
+    const body = `--${boundary}\r\nContent-Type: application/json\r\n\r\n${meta}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${content}\r\n--${boundary}--`;
+    await _driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+      method: 'POST', headers: { 'Content-Type': `multipart/related; boundary=${boundary}` }, body
+    });
+  }
+}
+
+async function _gdriveLoadFolders(driveFolderId) {
+  const q = encodeURIComponent(`name='${GDRIVE_FOLDERS_FILENAME}' and '${driveFolderId}' in parents and trashed=false`);
+  const search = await _driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`);
+  const { files } = await search.json();
+  if (!files?.length) return;
+  const r = await _driveFetch(`https://www.googleapis.com/drive/v3/files/${files[0].id}?alt=media`);
+  const data = await r.json();
+  if (!data._netrack_folders || !data.folders) return;
+  // Merge: keep existing folders, add any from Drive that don't exist locally
+  const existingIds = new Set((state.projectFolders || []).map(f => f.id));
+  for (const f of data.folders) {
+    if (!existingIds.has(f.id)) {
+      state.projectFolders.push(f);
+      existingIds.add(f.id);
+    }
+  }
+  _idbSaveConfig('projectFolders', state.projectFolders).catch(() => {});
+}
+
 // ── Project save/load ────────────────────────────────────────────────────────
 
 function _projectDescription(p) {
@@ -213,9 +255,10 @@ async function gdriveSave() {
         });
       }
       await _gdriveSaveManufacturers(folderId);
+      await _gdriveSaveFolders(folderId);
       logChange('Project saved to Google Drive');
       save();
-      toast(`☁ Saved "${p.name}" + manufacturer list to Google Drive`, 'success');
+      toast(`☁ Saved "${p.name}" to Google Drive`, 'success');
     } catch (err) { toast('Drive save failed: ' + err.message, 'error'); }
   });
 }
@@ -254,9 +297,10 @@ async function gdriveSaveAll() {
         } catch (err) { failed++; }
       }
       await _gdriveSaveManufacturers(folderId);
+      await _gdriveSaveFolders(folderId);
       const parts = [`${saved} saved`];
       if (failed) parts.push(`${failed} failed`);
-      toast(`☁ ${parts.join(', ')} + manufacturer list`, saved > 0 ? 'success' : 'error');
+      toast(`☁ ${parts.join(', ')}`, saved > 0 ? 'success' : 'error');
     } catch (err) { toast('Drive save failed: ' + err.message, 'error'); }
   });
 }
@@ -265,11 +309,12 @@ async function gdriveLoad() {
   _driveAuth(async () => {
     try {
       const folderId = await _getOrCreateDriveFolder();
-      // Load manufacturer list and cross-check existing devices
+      // Load manufacturer list and folders from Drive
       try {
         const mfrMatched = await _gdriveLoadManufacturers(folderId);
         if (mfrMatched > 0) toast(`☁ Auto-matched ${mfrMatched} device${mfrMatched!==1?'s':''} from manufacturer list`, 'success');
       } catch(e) { /* non-fatal */ }
+      try { await _gdriveLoadFolders(folderId); } catch(e) { /* non-fatal */ }
       const q = encodeURIComponent(`'${folderId}' in parents and name contains '_netrack.json' and trashed=false`);
       const r = await _driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime,size,description)&orderBy=modifiedTime+desc`);
       const { files } = await r.json();
@@ -371,11 +416,12 @@ async function openDriveProject(driveFileId) {
       importedVendors.forEach(v => { const k=(v.name||'').toLowerCase(); if(k&&!existingNames.has(k)){state.globalVendors.push({...v});existingNames.add(k);} });
       saveGlobalVendors();
     }
-    // Load manufacturer list from Drive and cross-check devices
+    // Load manufacturer list and folders from Drive
     try {
       const folderId = await _getOrCreateDriveFolder();
       const mfrMatched = await _gdriveLoadManufacturers(folderId);
       if (mfrMatched > 0) toast(`☁ Auto-matched ${mfrMatched} device${mfrMatched!==1?'s':''} from manufacturer list`, 'success');
+      await _gdriveLoadFolders(folderId);
     } catch(e) { /* non-fatal */ }
     // Remove from drive index — it's now a local project
     state.driveIndex = state.driveIndex.filter(e => e.driveFileId !== driveFileId);
@@ -416,11 +462,12 @@ async function gdriveImportFile(fileId, fileName) {
       importedVendors.forEach(v => { const k=(v.name||'').toLowerCase(); if(k&&!existingNames.has(k)){state.globalVendors.push({...v});existingNames.add(k);} });
       saveGlobalVendors();
     }
-    // Load manufacturer list from Drive and cross-check devices
+    // Load manufacturer list and folders from Drive
     try {
       const folderId = await _getOrCreateDriveFolder();
       const mfrMatched = await _gdriveLoadManufacturers(folderId);
       if (mfrMatched > 0) toast(`☁ Auto-matched ${mfrMatched} device${mfrMatched!==1?'s':''} from manufacturer list`, 'success');
+      await _gdriveLoadFolders(folderId);
     } catch(e) { /* non-fatal */ }
     save();
     closeModal();
