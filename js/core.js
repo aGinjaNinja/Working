@@ -875,7 +875,21 @@ async function lookupMacManufacturers() {
   }
   const needsLookup = p.devices.filter(d => d.mac && isMissing(d.manufacturer));
   if (needsLookup.length === 0) return toast('No devices with missing manufacturer info', 'error');
-  toast(`Looking up ${needsLookup.length} MAC address${needsLookup.length!==1?'es':''}…`);
+
+  // First pass: check local manufacturer list (OUI matches from globalVendors/existing devices)
+  let localMatched = 0;
+  if (typeof _autoResolveByOUI === 'function') {
+    localMatched = _autoResolveByOUI();
+  }
+  // Re-filter after local matches
+  const stillNeeds = p.devices.filter(d => d.mac && isMissing(d.manufacturer));
+  if (stillNeeds.length === 0) {
+    save();
+    if (typeof renderDevices === 'function') renderDevices();
+    return toast(`Resolved all ${localMatched} device${localMatched!==1?'s':''} from local manufacturer list`, 'success');
+  }
+
+  toast(`Resolved ${localMatched} locally. Looking up ${stillNeeds.length} MAC address${stillNeeds.length!==1?'es':''} online…`);
   let updated = 0, failed = 0;
 
   // Helper: try fetching manufacturer via CORS-enabled proxy → macvendors.com
@@ -903,7 +917,7 @@ async function lookupMacManufacturers() {
     return null;
   }
 
-  for (const dev of needsLookup) {
+  for (const dev of stillNeeds) {
     const mac = dev.mac.replace(/[^0-9a-fA-F]/g,'').slice(0,6).toUpperCase();
     if (mac.length < 6) { failed++; continue; }
     const vendor = await fetchVendor(mac);

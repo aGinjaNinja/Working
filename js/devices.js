@@ -168,7 +168,7 @@ function renderDevices(preserveSearch) {
           ${thSort('Name','name')}
           ${thSort('Device Type','type')}
           <th>Status</th>
-          <th>Vendor</th>
+          <th>Manufacturer</th>
           ${thSort('IP Address','ip')}
           ${thSort('MAC Address','mac')}
           ${thSort('Manufacturer / Model','mfr')}
@@ -675,7 +675,7 @@ function openDeviceModal(id) {
     { v:'decommission', label:'✕ Decommission', color:'#445566' },
   ];
   const statusOptHtml = statusOpts.map(s => `<option value="${s.v}" ${(d?.status||'')=== s.v?'selected':''}>${s.label}</option>`).join('');
-  const vendorOptHtml = `<option value="">— No Vendor —</option>` + (state.globalVendors||[]).map(v=>`<option value="${v.id}" ${(d?.vendorId||'')===v.id?'selected':''}>${esc(v.name)} (${esc(v.type||'')})</option>`).join('');
+  const vendorOptHtml = `<option value="">— No Manufacturer —</option>` + (state.globalVendors||[]).map(v=>`<option value="${v.id}" ${(d?.vendorId||'')===v.id?'selected':''}>${esc(v.name)} (${esc(v.type||'')})</option>`).join('');
   openModal(`
     <h3>${isNew ? 'Add Device' : 'Edit Device'}</h3>
     <div class="form-row-inline">
@@ -701,7 +701,7 @@ function openDeviceModal(id) {
     <div class="form-row-inline">
       <div class="form-row"><label>Status / Condition</label>
         <select class="form-control" id="d-status">${statusOptHtml}</select></div>
-      <div class="form-row"><label>Vendor / Provider</label>
+      <div class="form-row"><label>Manufacturer</label>
         <select class="form-control" id="d-vendor">${vendorOptHtml}</select></div>
     </div>
     <div class="form-row" id="ports-field" style="${showPorts?'':'display:none'}">
@@ -991,7 +991,7 @@ function saveDevice(id) {
       if ((old.vendorId||'') !== (data.vendorId||'')) {
         const oldV = getVendorById(old.vendorId||'');
         const newV = getVendorById(data.vendorId||'');
-        changes.push(`vendor: ${oldV?oldV.name:'None'} → ${newV?newV.name:'None'}`);
+        changes.push(`manufacturer: ${oldV?oldV.name:'None'} → ${newV?newV.name:'None'}`);
       }
       if ((old.webUser||'') !== data.webUser) changes.push(`web user: "${old.webUser||''}" → "${data.webUser}"`);
       if ((old.webPassword||'') !== data.webPassword) changes.push(`web password: "${old.webPassword||''}" → "${data.webPassword}"`);

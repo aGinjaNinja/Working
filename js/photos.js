@@ -22,9 +22,13 @@ function renderPhotos() {
 
   setTopbarActions(`
     <button class="btn btn-ghost btn-sm" onclick="createPhotoFolder()">📁 New Folder</button>
-    <label class="btn btn-primary btn-sm" style="cursor:pointer">
+    <label class="btn btn-ghost btn-sm" style="cursor:pointer">
       📷 Add Photos
       <input type="file" accept="image/*" multiple style="display:none" onchange="uploadPhotos(event)">
+    </label>
+    <label class="btn btn-primary btn-sm" style="cursor:pointer">
+      📸 Take Photo
+      <input type="file" accept="image/*" capture="environment" style="display:none" onchange="uploadPhotos(event)">
     </label>
   `);
 
@@ -95,7 +99,7 @@ function renderPhotos() {
         ? `<div class="photo-folder-badge">📁 ${esc(folderObj.name)}</div>` : '';
       return `
       <div class="photo-card" onclick="openPhotoEditor(${idx})">
-        <div class="photo-thumb" style="background-image:url('${ph.data}')"></div>
+        <div class="photo-thumb" style="background-image:url('${ph.data}')${ph.rotation ? ';transform:rotate('+ph.rotation+'deg)' : ''}"></div>
         <div class="photo-meta">
           <div class="photo-title">${esc(ph.caption || ph.name || 'Photo ' + (idx+1))}</div>
           <div class="photo-date">${ph.ts ? new Date(ph.ts).toLocaleDateString() : (ph.date ? new Date(ph.date).toLocaleDateString() : '')}${assigned?` · <span style="color:var(--accent)">${assigned} tagged</span>`:''}</div>
@@ -449,6 +453,7 @@ function openPhotoEditor(idx, preservePanZoom) {
     <button id="photo-lock-btn" class="btn btn-sm ${_photoLayoutLocked ? 'btn-primary' : 'btn-ghost'}" onclick="togglePhotoLock()" title="${_photoLayoutLocked ? 'Unlock layout to move device tags' : 'Lock layout to prevent accidental moves'}" style="${_photoLayoutLocked ? 'border-color:var(--amber);background:rgba(255,170,0,.15);color:var(--amber)' : ''}">
       ${_photoLayoutLocked ? '🔒 Layout Locked' : '🔓 Lock Layout'}
     </button>
+    <button class="btn btn-ghost btn-sm" onclick="rotatePhoto(${idx})" title="Rotate 90° clockwise">↻ Rotate</button>
     <label class="btn btn-ghost btn-sm" style="cursor:pointer" title="Replace photo">
       🔄 Replace
       <input type="file" accept="image/*" style="display:none" onchange="replacePhoto(event,${idx})">
@@ -464,11 +469,12 @@ function openPhotoEditor(idx, preservePanZoom) {
            onmousemove="onPhotoMarkerMove(event)"
            onmouseup="onPhotoMarkerUp(event)"
            onmouseleave="onPhotoCanvasLeave(event)"
+           onwheel="onPhotoMouseWheel(event)"
            ontouchstart="onPhotoCanvasTouchStart(event)"
            ontouchmove="onPhotoCanvasTouchMove(event)"
            ontouchend="onPhotoCanvasTouchEnd(event)">
         <div id="photo-pan-layer">
-          <img id="photo-editor-img" src="${ph.data}" ondragstart="return false">
+          <img id="photo-editor-img" src="${ph.data}" ondragstart="return false" style="${ph.rotation ? 'transform:rotate('+ph.rotation+'deg)' : ''}">
           <div id="photo-markers-layer"></div>
         </div>
       </div>
@@ -1157,6 +1163,38 @@ function replacePhoto(e, idx) {
   };
   reader.readAsDataURL(file);
   e.target.value = '';
+}
+
+function rotatePhoto(idx) {
+  const p = getProject();
+  const ph = p.photos[idx];
+  if (!ph) return;
+  ph.rotation = ((ph.rotation || 0) + 90) % 360;
+  save();
+  openPhotoEditor(idx, true);
+  toast('Photo rotated', 'success');
+}
+
+function onPhotoMouseWheel(e) {
+  e.preventDefault();
+  const wrap = document.getElementById('photo-canvas-wrap');
+  if (!wrap) return;
+  const wr = wrap.getBoundingClientRect();
+  const mouseX = e.clientX - wr.left;
+  const mouseY = e.clientY - wr.top;
+  const hw = wrap.offsetWidth / 2, hh = wrap.offsetHeight / 2;
+
+  // Calculate zoom based on scroll direction
+  const delta = e.deltaY > 0 ? 0.9 : 1.1;
+  const newZoom = Math.max(0.5, Math.min(5, _photoZoom * delta));
+
+  // Zoom toward mouse position
+  const lx = (mouseX - hw - _photoPan.x) / _photoZoom;
+  const ly = (mouseY - hh - _photoPan.y) / _photoZoom;
+  _photoPan.x = mouseX - hw - lx * newZoom;
+  _photoPan.y = mouseY - hh - ly * newZoom;
+  _photoZoom = newZoom;
+  applyPhotoTransform();
 }
 
 // legacy - keep for any stale refs

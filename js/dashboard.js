@@ -118,13 +118,12 @@ function renderDashboard() {
           </div>
         </div>
 
-        <!-- Vendors & Contracts -->
+        <!-- Manufacturers -->
         <div style="margin-top:20px;background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden">
           <div style="padding:10px 14px;background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
-            <div style="font-size:13px;font-weight:600">📋 Vendors &amp; Contracts</div>
-            <button class="btn btn-primary btn-sm" onclick="addVendor()">+ Add Vendor</button>
+            <div style="font-size:13px;font-weight:600">📋 Manufacturers</div>
           </div>
-          ${vendors.length===0 ? `<div style="padding:16px;color:var(--text3);font-size:12px">No vendors yet.</div>` : `
+          ${vendors.length===0 ? `<div style="padding:16px;color:var(--text3);font-size:12px">No manufacturers yet.</div>` : `
           <div class="vendor-table-wrap">
             <table style="font-size:12px">
               <thead><tr>

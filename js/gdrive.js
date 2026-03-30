@@ -79,6 +79,101 @@ async function _getOrCreateDriveFolder() {
   return (await cr.json()).id;
 }
 
+// ── Manufacturer list save/load ──────────────────────────────────────────────
+const GDRIVE_MFR_FILENAME = 'NetRackManager_manufacturers.json';
+
+function _buildManufacturerList() {
+  // Build OUI→manufacturer map from all devices that have a manufacturer
+  const ouiMap = {}; // oui → { name, vendorId }
+  state.projects.forEach(p => {
+    (p.devices || []).forEach(d => {
+      const mfr = (d.manufacturer || '').trim();
+      if (!mfr) return;
+      const mfrLower = mfr.toLowerCase();
+      if (['n/s','n/a','na','none','unknown','-','—','n\\a','n\\s'].includes(mfrLower)) return;
+      const oui = typeof _extractOUI === 'function' ? _extractOUI(d.mac) : '';
+      if (!oui) return;
+      if (!ouiMap[oui]) ouiMap[oui] = { name: mfr, vendorId: d.vendorId || '' };
+    });
+  });
+  // Group by manufacturer name
+  const mfrMap = {};
+  for (const [oui, info] of Object.entries(ouiMap)) {
+    const key = info.name.toLowerCase();
+    if (!mfrMap[key]) mfrMap[key] = { name: info.name, vendorId: info.vendorId, ouis: [] };
+    if (!mfrMap[key].ouis.includes(oui)) mfrMap[key].ouis.push(oui);
+  }
+  return Object.values(mfrMap);
+}
+
+async function _gdriveSaveManufacturers(folderId) {
+  const list = _buildManufacturerList();
+  const content = JSON.stringify({ _netrack_manufacturers: true, updated: new Date().toISOString(), manufacturers: list }, null, 2);
+  const q = encodeURIComponent(`name='${GDRIVE_MFR_FILENAME}' and '${folderId}' in parents and trashed=false`);
+  const search = await _driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`);
+  const { files } = await search.json();
+  if (files?.length) {
+    await _driveFetch(`https://www.googleapis.com/upload/drive/v3/files/${files[0].id}?uploadType=media`, {
+      method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: content
+    });
+  } else {
+    const boundary = 'nrm' + Date.now();
+    const meta = JSON.stringify({ name: GDRIVE_MFR_FILENAME, parents: [folderId], mimeType: 'application/json' });
+    const body = `--${boundary}\r\nContent-Type: application/json\r\n\r\n${meta}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${content}\r\n--${boundary}--`;
+    await _driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+      method: 'POST', headers: { 'Content-Type': `multipart/related; boundary=${boundary}` }, body
+    });
+  }
+}
+
+async function _gdriveLoadManufacturers(folderId) {
+  const q = encodeURIComponent(`name='${GDRIVE_MFR_FILENAME}' and '${folderId}' in parents and trashed=false`);
+  const search = await _driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`);
+  const { files } = await search.json();
+  if (!files?.length) return 0;
+  const r = await _driveFetch(`https://www.googleapis.com/drive/v3/files/${files[0].id}?alt=media`);
+  const data = await r.json();
+  if (!data._netrack_manufacturers || !data.manufacturers?.length) return 0;
+
+  // Merge manufacturers into globalVendors (dedup by name)
+  const existingNames = new Set(state.globalVendors.map(v => (v.name || '').toLowerCase()));
+  for (const m of data.manufacturers) {
+    const key = (m.name || '').toLowerCase();
+    if (!key || existingNames.has(key)) continue;
+    state.globalVendors.push({
+      id: m.vendorId || genId(), name: m.name, type: 'Vendor',
+      accountNum: '', circuitId: '', supportPhone: '', supportEmail: '', notes: ''
+    });
+    existingNames.add(key);
+  }
+  saveGlobalVendors();
+
+  // Cross-check all devices: apply OUI matches
+  let matched = 0;
+  const ouiToMfr = {};
+  for (const m of data.manufacturers) {
+    const vendor = state.globalVendors.find(v => (v.name || '').toLowerCase() === (m.name || '').toLowerCase());
+    const vid = vendor ? vendor.id : '';
+    for (const oui of (m.ouis || [])) {
+      ouiToMfr[oui] = { name: m.name, vendorId: vid };
+    }
+  }
+  state.projects.forEach(p => {
+    (p.devices || []).forEach(d => {
+      if (typeof _isDeviceMissingVendor === 'function' && !_isDeviceMissingVendor(d)) return;
+      const oui = typeof _extractOUI === 'function' ? _extractOUI(d.mac) : '';
+      if (!oui || !ouiToMfr[oui]) return;
+      d.manufacturer = ouiToMfr[oui].name;
+      if (ouiToMfr[oui].vendorId) d.vendorId = ouiToMfr[oui].vendorId;
+      matched++;
+    });
+  });
+  if (matched > 0) save();
+  return matched;
+}
+
+// ── Project save/load ────────────────────────────────────────────────────────
+
 async function gdriveSave() {
   const p = getProject();
   if (!p) return toast('No project open', 'error');
@@ -106,9 +201,10 @@ async function gdriveSave() {
           body
         });
       }
+      await _gdriveSaveManufacturers(folderId);
       logChange('Project saved to Google Drive');
       save();
-      toast(`☁ Saved "${p.name}" to Google Drive`, 'success');
+      toast(`☁ Saved "${p.name}" + manufacturer list to Google Drive`, 'success');
     } catch (err) { toast('Drive save failed: ' + err.message, 'error'); }
   });
 }
@@ -142,9 +238,10 @@ async function gdriveSaveAll() {
           saved++;
         } catch (err) { failed++; }
       }
+      await _gdriveSaveManufacturers(folderId);
       const parts = [`${saved} saved`];
       if (failed) parts.push(`${failed} failed`);
-      toast(`☁ ${parts.join(', ')}`, saved > 0 ? 'success' : 'error');
+      toast(`☁ ${parts.join(', ')} + manufacturer list`, saved > 0 ? 'success' : 'error');
     } catch (err) { toast('Drive save failed: ' + err.message, 'error'); }
   });
 }
@@ -153,6 +250,11 @@ async function gdriveLoad() {
   _driveAuth(async () => {
     try {
       const folderId = await _getOrCreateDriveFolder();
+      // Load manufacturer list and cross-check existing devices
+      try {
+        const mfrMatched = await _gdriveLoadManufacturers(folderId);
+        if (mfrMatched > 0) toast(`☁ Auto-matched ${mfrMatched} device${mfrMatched!==1?'s':''} from manufacturer list`, 'success');
+      } catch(e) { /* non-fatal */ }
       const q = encodeURIComponent(`'${folderId}' in parents and name contains '_netrack.json' and trashed=false`);
       const r = await _driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime,size)&orderBy=modifiedTime+desc`);
       const { files } = await r.json();
@@ -247,6 +349,12 @@ async function openDriveProject(driveFileId) {
       importedVendors.forEach(v => { const k=(v.name||'').toLowerCase(); if(k&&!existingNames.has(k)){state.globalVendors.push({...v});existingNames.add(k);} });
       saveGlobalVendors();
     }
+    // Load manufacturer list from Drive and cross-check devices
+    try {
+      const folderId = await _getOrCreateDriveFolder();
+      const mfrMatched = await _gdriveLoadManufacturers(folderId);
+      if (mfrMatched > 0) toast(`☁ Auto-matched ${mfrMatched} device${mfrMatched!==1?'s':''} from manufacturer list`, 'success');
+    } catch(e) { /* non-fatal */ }
     // Remove from drive index — it's now a local project
     state.driveIndex = state.driveIndex.filter(e => e.driveFileId !== driveFileId);
     _idbSaveConfig('driveIndex', state.driveIndex).catch(() => {});
@@ -286,6 +394,12 @@ async function gdriveImportFile(fileId, fileName) {
       importedVendors.forEach(v => { const k=(v.name||'').toLowerCase(); if(k&&!existingNames.has(k)){state.globalVendors.push({...v});existingNames.add(k);} });
       saveGlobalVendors();
     }
+    // Load manufacturer list from Drive and cross-check devices
+    try {
+      const folderId = await _getOrCreateDriveFolder();
+      const mfrMatched = await _gdriveLoadManufacturers(folderId);
+      if (mfrMatched > 0) toast(`☁ Auto-matched ${mfrMatched} device${mfrMatched!==1?'s':''} from manufacturer list`, 'success');
+    } catch(e) { /* non-fatal */ }
     save();
     closeModal();
     state.currentProjectId = p.id;
