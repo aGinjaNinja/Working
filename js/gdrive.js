@@ -217,7 +217,7 @@ async function _gdriveLoadFolders(driveFolderId) {
 // ── Project save/load ────────────────────────────────────────────────────────
 
 function _projectDescription(p) {
-  return JSON.stringify({ devices: (p.devices||[]).length, racks: (p.racks||[]).length, photos: (p.photos||[]).length });
+  return JSON.stringify({ devices: (p.devices||[]).length, racks: (p.racks||[]).length, photos: (p.photos||[]).length, folderId: p.folderId || '' });
 }
 
 async function gdriveSave() {
@@ -368,7 +368,8 @@ async function gdriveAddAllToDashboard() {
       size: f.size,
       devices: counts.devices || 0,
       racks: counts.racks || 0,
-      photos: counts.photos || 0
+      photos: counts.photos || 0,
+      folderId: counts.folderId || ''
     };
   });
   // Merge with existing drive index

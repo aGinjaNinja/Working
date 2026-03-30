@@ -53,7 +53,7 @@ function renderProjects() {
   const folders = state.projectFolders || [];
   const hasFolders = folders.length > 0;
 
-  // Build folderId → project[] map
+  // Build folderId → local project[] map
   const folderProjects = {};
   const unfiled = [];
   state.projects.forEach(p => {
@@ -65,15 +65,32 @@ function renderProjects() {
     }
   });
 
+  // Build folderId → Drive-only project[] map
+  const localNames = new Set(state.projects.map(p => p.name));
+  const driveOnly = (state.driveIndex || []).filter(d => !localNames.has(d.name));
+  const driveFoldered = {};
+  const driveUnfiled = [];
+  driveOnly.forEach(d => {
+    if (d.folderId && folders.find(f => f.id === d.folderId)) {
+      if (!driveFoldered[d.folderId]) driveFoldered[d.folderId] = [];
+      driveFoldered[d.folderId].push(d);
+    } else {
+      driveUnfiled.push(d);
+    }
+  });
+
   // ── "+ New Folder" link at top — always visible ──
   const topBar = document.createElement('div');
   topBar.style.cssText = 'display:flex;justify-content:flex-end;margin-bottom:8px';
   topBar.innerHTML = `<button class="btn btn-ghost btn-sm" onclick="newFolder()" style="font-size:12px;padding:4px 10px">+ New Folder</button>`;
   g.appendChild(topBar);
 
-  // ── Render each folder ──
+  // ── Render each folder (local + Drive cards together) ──
   folders.forEach(folder => {
-    const projects = folderProjects[folder.id] || [];
+    const localCards = folderProjects[folder.id] || [];
+    const driveCards = driveFoldered[folder.id] || [];
+    const totalCount = localCards.length + driveCards.length;
+
     const folderEl = document.createElement('div');
     folderEl.className = 'proj-folder';
 
@@ -82,7 +99,7 @@ function renderProjects() {
     header.innerHTML = `
       <div class="proj-folder-toggle" onclick="toggleFolder('${folder.id}')">${folder.collapsed ? '▶' : '▼'}</div>
       <div class="proj-folder-name" onclick="toggleFolder('${folder.id}')">${esc(folder.name)}</div>
-      <div class="proj-folder-count">${projects.length} project${projects.length !== 1 ? 's' : ''}</div>
+      <div class="proj-folder-count">${totalCount} project${totalCount !== 1 ? 's' : ''}</div>
       <button class="proj-folder-action" onclick="renameFolder('${folder.id}')" title="Rename folder">✎</button>
       <button class="proj-folder-action" onclick="deleteFolder('${folder.id}')" title="Delete folder">✕</button>
     `;
@@ -91,7 +108,8 @@ function renderProjects() {
     if (!folder.collapsed) {
       const grid = document.createElement('div');
       grid.className = 'proj-inner-grid';
-      projects.forEach(p => grid.appendChild(_createProjectCard(p)));
+      localCards.forEach(p => grid.appendChild(_createProjectCard(p)));
+      driveCards.forEach(d => grid.appendChild(_createDriveCard(d)));
       folderEl.appendChild(grid);
     }
 
@@ -114,20 +132,18 @@ function renderProjects() {
   unfiledGrid.appendChild(_createNewProjectCard(''));
   g.appendChild(unfiledGrid);
 
-  // ── Drive-only projects ──
-  const localNames = new Set(state.projects.map(p => p.name));
-  const driveOnly = (state.driveIndex || []).filter(d => !localNames.has(d.name));
-  if (driveOnly.length > 0) {
+  // ── Unfiled Drive-only projects ──
+  if (driveUnfiled.length > 0) {
     const header = document.createElement('div');
     header.className = 'proj-folder-header';
     header.innerHTML = `
       <div class="proj-folder-name" style="color:#4285f4">☁ Google Drive</div>
-      <div class="proj-folder-count">${driveOnly.length}</div>
+      <div class="proj-folder-count">${driveUnfiled.length}</div>
     `;
     g.appendChild(header);
     const grid = document.createElement('div');
     grid.className = 'proj-inner-grid';
-    driveOnly.forEach(d => grid.appendChild(_createDriveCard(d)));
+    driveUnfiled.forEach(d => grid.appendChild(_createDriveCard(d)));
     g.appendChild(grid);
   }
 }
