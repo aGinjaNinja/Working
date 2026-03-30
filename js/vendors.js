@@ -4,7 +4,6 @@ let _returnToUnresolved = false;
 let _pendingOUI = '';
 let _unresolvedSort = { col: 'project', dir: 'asc' };
 
-function addVendor() { openVendorModal(null); }
 function editVendor(id) { openVendorModal(id); }
 
 function addVendorFromUnresolved(mac, deviceId, projectId) {
@@ -250,20 +249,20 @@ function renderVendorPage() {
 
   area.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;flex-wrap:wrap;gap:8px">
-      <div>
-        <div style="font-size:16px;font-weight:700;color:var(--text)">Vendors &amp; Contracts</div>
-        <div style="font-size:11px;color:var(--text3);margin-top:2px">Shared across all projects &nbsp;·&nbsp; ${vendors.length} vendor${vendors.length!==1?'s':''}</div>
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="btn btn-ghost btn-sm" onclick="toggleVendorPage()" style="padding:4px 10px">← Projects</button>
+        <div>
+          <div style="font-size:16px;font-weight:700;color:var(--text)">Vendors &amp; Contracts</div>
+          <div style="font-size:11px;color:var(--text3);margin-top:2px">Shared across all projects &nbsp;·&nbsp; ${vendors.length} vendor${vendors.length!==1?'s':''}</div>
+        </div>
       </div>
-      <div style="display:flex;gap:8px">
-        ${unresolvedCount > 0 ? `<button class="btn btn-ghost btn-sm" onclick="showUnresolvedDevices()" style="color:var(--amber);border-color:rgba(255,170,0,.4)">⚠ ${unresolvedCount} device${unresolvedCount!==1?'s':''} without vendor</button>` : ''}
-        <button class="btn btn-primary btn-sm" onclick="addVendor()">+ Add Vendor</button>
-      </div>
+      ${unresolvedCount > 0 ? `<button class="btn btn-ghost btn-sm" onclick="showUnresolvedDevices()" style="color:var(--amber);border-color:rgba(255,170,0,.4)">⚠ ${unresolvedCount} device${unresolvedCount!==1?'s':''} without vendor</button>` : ''}
     </div>
     ${vendors.length===0 ? `
       <div style="text-align:center;padding:40px 20px;color:var(--text3)">
         <div style="font-size:28px;margin-bottom:8px">📋</div>
-        <div style="font-size:14px;font-weight:600;color:var(--text2);margin-bottom:4px">No vendors yet</div>
-        <div style="font-size:12px">Add ISPs, MSPs, carriers, and service providers shared across all your projects.</div>
+        <div style="font-size:14px;font-weight:600;color:var(--text2);margin-bottom:4px">No manufacturers yet</div>
+        <div style="font-size:12px">Manufacturers are added from the "devices without vendor" list based on MAC address OUI prefix.</div>
       </div>` : `
       <div style="overflow-x:auto">
         <table style="width:100%;font-size:12px;border-collapse:collapse">
@@ -337,10 +336,7 @@ function showUnresolvedDevices() {
   const hasVendors = state.globalVendors.length > 0;
 
   openModal(`
-    <h3 style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
-      <span>⚠ ${rows.length} Device${rows.length!==1?'s':''} Without Vendor</span>
-      <button class="btn btn-primary btn-sm" onclick="_returnToUnresolved=true;openVendorModal(null)">+ New Vendor</button>
-    </h3>
+    <h3>⚠ ${rows.length} Device${rows.length!==1?'s':''} Without Vendor</h3>
     <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Click <strong>+ Add</strong> on a row to create a vendor from that device's MAC prefix. All devices sharing that prefix get auto-assigned. Click column headers to sort.</div>
     ${hasVendors ? `
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:8px 10px;background:var(--panel);border:1px solid var(--border);border-radius:6px">
