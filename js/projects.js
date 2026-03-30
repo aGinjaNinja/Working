@@ -30,6 +30,7 @@ function renderProjects() {
       <div style="position:absolute;top:8px;right:8px;font-size:10px;color:#4285f4;font-family:var(--mono);background:rgba(66,133,244,.1);border:1px solid rgba(66,133,244,.3);border-radius:4px;padding:1px 6px">☁ Drive</div>
       <div class="pname">${esc(d.name)}</div>
       <div class="pmeta" style="color:#4285f4">Click to download &amp; open</div>
+      ${(d.devices || d.racks || d.photos) ? `<div class="pmeta" style="margin-top:4px;font-size:10px;color:var(--text2)">${d.devices||0} devices &middot; ${d.racks||0} racks &middot; ${d.photos||0} photos</div>` : ''}
       <div class="pmeta" style="margin-top:4px;color:var(--text3);font-size:10px">${d.modifiedTime ? new Date(d.modifiedTime).toLocaleDateString() : ''}${d.size ? ' &middot; ' + (d.size/1024).toFixed(0) + ' KB' : ''}</div>
     `;
     div.addEventListener('click', () => openDriveProject(d.driveFileId));

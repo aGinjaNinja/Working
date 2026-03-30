@@ -174,6 +174,10 @@ async function _gdriveLoadManufacturers(folderId) {
 
 // ── Project save/load ────────────────────────────────────────────────────────
 
+function _projectDescription(p) {
+  return JSON.stringify({ devices: (p.devices||[]).length, racks: (p.racks||[]).length, photos: (p.photos||[]).length });
+}
+
 async function gdriveSave() {
   const p = getProject();
   if (!p) return toast('No project open', 'error');
@@ -182,6 +186,7 @@ async function gdriveSave() {
       const folderId = await _getOrCreateDriveFolder();
       const fileName = p.name.replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_') + '_netrack.json';
       const content  = JSON.stringify({ _netrack_version: 2, typeColors: state.typeColors || {}, globalVendors: state.globalVendors || [], project: p }, null, 2);
+      const desc = _projectDescription(p);
       const q = encodeURIComponent(`name='${fileName}' and '${folderId}' in parents and trashed=false`);
       const search = await _driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`);
       const { files } = await search.json();
@@ -191,9 +196,15 @@ async function gdriveSave() {
           headers: { 'Content-Type': 'application/json' },
           body: content
         });
+        // Update description with counts
+        await _driveFetch(`https://www.googleapis.com/drive/v3/files/${files[0].id}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ description: desc })
+        });
       } else {
         const boundary = 'nrm' + Date.now();
-        const meta = JSON.stringify({ name: fileName, parents: [folderId], mimeType: 'application/json' });
+        const meta = JSON.stringify({ name: fileName, parents: [folderId], mimeType: 'application/json', description: desc });
         const body = `--${boundary}\r\nContent-Type: application/json\r\n\r\n${meta}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${content}\r\n--${boundary}--`;
         await _driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
           method: 'POST',
@@ -220,6 +231,7 @@ async function gdriveSaveAll() {
         try {
           const fileName = p.name.replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_') + '_netrack.json';
           const content = JSON.stringify({ _netrack_version: 2, typeColors: state.typeColors || {}, globalVendors: state.globalVendors || [], project: p }, null, 2);
+          const desc = _projectDescription(p);
           const q = encodeURIComponent(`name='${fileName}' and '${folderId}' in parents and trashed=false`);
           const search = await _driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`);
           const { files } = await search.json();
@@ -227,9 +239,12 @@ async function gdriveSaveAll() {
             await _driveFetch(`https://www.googleapis.com/upload/drive/v3/files/${files[0].id}?uploadType=media`, {
               method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: content
             });
+            await _driveFetch(`https://www.googleapis.com/drive/v3/files/${files[0].id}`, {
+              method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ description: desc })
+            });
           } else {
             const boundary = 'nrm' + Date.now();
-            const meta = JSON.stringify({ name: fileName, parents: [folderId], mimeType: 'application/json' });
+            const meta = JSON.stringify({ name: fileName, parents: [folderId], mimeType: 'application/json', description: desc });
             const body = `--${boundary}\r\nContent-Type: application/json\r\n\r\n${meta}\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n${content}\r\n--${boundary}--`;
             await _driveFetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
               method: 'POST', headers: { 'Content-Type': `multipart/related; boundary=${boundary}` }, body
@@ -256,7 +271,7 @@ async function gdriveLoad() {
         if (mfrMatched > 0) toast(`☁ Auto-matched ${mfrMatched} device${mfrMatched!==1?'s':''} from manufacturer list`, 'success');
       } catch(e) { /* non-fatal */ }
       const q = encodeURIComponent(`'${folderId}' in parents and name contains '_netrack.json' and trashed=false`);
-      const r = await _driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime,size)&orderBy=modifiedTime+desc`);
+      const r = await _driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,modifiedTime,size,description)&orderBy=modifiedTime+desc`);
       const { files } = await r.json();
       if (!files?.length) return toast('No NetRackManager files found in Google Drive.', 'error');
 
@@ -297,13 +312,20 @@ let _gdrivePendingFiles = [];
 async function gdriveAddAllToDashboard() {
   const files = _gdrivePendingFiles;
   if (!files?.length) return;
-  const index = files.map(f => ({
-    driveFileId: f.id,
-    name: f.name.replace(/_netrack\.json$/, '').replace(/_/g, ' '),
-    fileName: f.name,
-    modifiedTime: f.modifiedTime,
-    size: f.size
-  }));
+  const index = files.map(f => {
+    let counts = {};
+    try { counts = JSON.parse(f.description || '{}'); } catch(e) {}
+    return {
+      driveFileId: f.id,
+      name: f.name.replace(/_netrack\.json$/, '').replace(/_/g, ' '),
+      fileName: f.name,
+      modifiedTime: f.modifiedTime,
+      size: f.size,
+      devices: counts.devices || 0,
+      racks: counts.racks || 0,
+      photos: counts.photos || 0
+    };
+  });
   // Merge with existing drive index
   const merged = [...state.driveIndex];
   for (const entry of index) {
