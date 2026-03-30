@@ -269,7 +269,7 @@ function newProject(preselectedFolderId) {
   setTimeout(() => document.getElementById('pn-name')?.focus(), 50);
 }
 
-function createProject() {
+async function createProject() {
   const name = document.getElementById('pn-name')?.value?.trim();
   if (!name) return toast('Enter a project name', 'error');
   const folderId = document.getElementById('pn-folder')?.value || '';
@@ -285,6 +285,7 @@ function createProject() {
     cableRuns: [], locations: [], siteMap: { data: null, markers: [], cableLines: [] }
   };
   state.projects.push(p);
+  await _idbSaveProject(p);
   save();
   closeModal();
   openProject(p.id);
