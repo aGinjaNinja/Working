@@ -65,13 +65,11 @@ function renderProjects() {
     }
   });
 
-  // ── "+ New Folder" link at top (only when folders exist or there are projects) ──
-  if (state.projects.length > 0 || hasFolders) {
-    const topBar = document.createElement('div');
-    topBar.style.cssText = 'display:flex;justify-content:flex-end;margin-bottom:8px';
-    topBar.innerHTML = `<button class="btn btn-ghost btn-sm" onclick="newFolder()" style="font-size:12px;padding:4px 10px">+ New Folder</button>`;
-    g.appendChild(topBar);
-  }
+  // ── "+ New Folder" link at top — always visible ──
+  const topBar = document.createElement('div');
+  topBar.style.cssText = 'display:flex;justify-content:flex-end;margin-bottom:8px';
+  topBar.innerHTML = `<button class="btn btn-ghost btn-sm" onclick="newFolder()" style="font-size:12px;padding:4px 10px">+ New Folder</button>`;
+  g.appendChild(topBar);
 
   // ── Render each folder ──
   folders.forEach(folder => {
