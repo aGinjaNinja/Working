@@ -291,7 +291,7 @@ function renderVendorPage() {
       <div style="display:flex;align-items:center;gap:12px">
         <button class="btn btn-ghost btn-sm" onclick="toggleVendorPage()" style="padding:4px 10px">← Projects</button>
         <div>
-          <div style="font-size:16px;font-weight:700;color:var(--text)">Manufacturers</div>
+          <div style="font-size:16px;font-weight:700;color:var(--text)">Manufacturer List</div>
           <div style="font-size:11px;color:var(--text3);margin-top:2px">Shared across all projects &nbsp;·&nbsp; ${vendors.length} manufacturer${vendors.length!==1?'s':''}</div>
         </div>
       </div>

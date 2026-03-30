@@ -20,7 +20,6 @@ function renderDashboard() {
   const clDone = cl.filter(i=>i.done).length;
   const clPct = cl.length>0 ? Math.round(clDone/cl.length*100) : 0;
   // Vendors (global)
-  const vendors = state.globalVendors||[];
   // Time log
   const timeLog = p.timeLog||[];
   const totalMins = timeLog.reduce((s,e)=>{
@@ -116,34 +115,6 @@ function renderDashboard() {
                 </div>`;
               }).join('')}
           </div>
-        </div>
-
-        <!-- Manufacturers -->
-        <div style="margin-top:20px;background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden">
-          <div style="padding:10px 14px;background:var(--panel);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
-            <div style="font-size:13px;font-weight:600">📋 Manufacturers</div>
-          </div>
-          ${vendors.length===0 ? `<div style="padding:16px;color:var(--text3);font-size:12px">No manufacturers yet.</div>` : `
-          <div class="vendor-table-wrap">
-            <table style="font-size:12px">
-              <thead><tr>
-                <th>Type</th><th>Name</th><th>Account #</th><th>Circuit ID</th><th>Support Contact</th><th></th>
-              </tr></thead>
-              <tbody>
-                ${vendors.map(v=>`<tr>
-                  <td><span style="background:var(--card2);border:1px solid var(--border2);border-radius:3px;padding:1px 6px;font-size:10px;font-family:var(--mono)">${esc(v.type||'')}</span></td>
-                  <td style="font-weight:600">${esc(v.name||'')}</td>
-                  <td class="mono">${esc(v.accountNum||'—')}</td>
-                  <td class="mono">${esc(v.circuitId||'—')}</td>
-                  <td>${esc(v.supportPhone||'')}${v.supportPhone&&v.supportEmail?' / ':''}${esc(v.supportEmail||'')}</td>
-                  <td><div class="td-actions">
-                    <button class="btn btn-ghost btn-sm btn-icon" onclick="editVendor('${v.id}')">✎</button>
-                    <button class="btn btn-danger btn-sm btn-icon" onclick="deleteVendor('${v.id}')">✕</button>
-                  </div></td>
-                </tr>`).join('')}
-              </tbody>
-            </table>
-          </div>`}
         </div>
 
         <!-- Time Log -->
