@@ -2,6 +2,7 @@ const VENDOR_TYPES = ['ISP','MSP','Carrier','Vendor','Other'];
 
 let _returnToUnresolved = false;
 let _pendingOUI = '';
+let _unresolvedSort = { col: 'project', dir: 'asc' };
 
 function addVendor() { openVendorModal(null); }
 function editVendor(id) { openVendorModal(id); }
@@ -295,6 +296,16 @@ function renderVendorPage() {
       </div>`}`;
 }
 
+function _sortUnresolved(col) {
+  if (_unresolvedSort.col === col) {
+    _unresolvedSort.dir = _unresolvedSort.dir === 'asc' ? 'desc' : 'asc';
+  } else {
+    _unresolvedSort.col = col;
+    _unresolvedSort.dir = 'asc';
+  }
+  showUnresolvedDevices();
+}
+
 function showUnresolvedDevices() {
   const rows = [];
   state.projects.forEach(p => {
@@ -310,6 +321,18 @@ function showUnresolvedDevices() {
     return;
   }
 
+  // Sort rows
+  const col = _unresolvedSort.col;
+  const dir = _unresolvedSort.dir === 'asc' ? 1 : -1;
+  rows.sort((a, b) => {
+    const av = (a[col] || '').toLowerCase();
+    const bv = (b[col] || '').toLowerCase();
+    return av < bv ? -dir : av > bv ? dir : 0;
+  });
+
+  const arrow = (c) => _unresolvedSort.col === c ? (_unresolvedSort.dir === 'asc' ? ' ▲' : ' ▼') : '';
+  const thStyle = 'text-align:left;padding:6px 8px;border-bottom:2px solid var(--border);white-space:nowrap;cursor:pointer;user-select:none;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3)';
+
   const vendorOpts = state.globalVendors.map(v=>`<option value="${v.id}">${esc(v.name)} (${esc(v.type||'')})</option>`).join('');
   const hasVendors = state.globalVendors.length > 0;
 
@@ -318,7 +341,7 @@ function showUnresolvedDevices() {
       <span>⚠ ${rows.length} Device${rows.length!==1?'s':''} Without Vendor</span>
       <button class="btn btn-primary btn-sm" onclick="_returnToUnresolved=true;openVendorModal(null)">+ New Vendor</button>
     </h3>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Click <strong>+ Add</strong> on a row to create a vendor from that device's MAC prefix (first 3 octets). All devices sharing that prefix get auto-assigned.</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">Click <strong>+ Add</strong> on a row to create a vendor from that device's MAC prefix. All devices sharing that prefix get auto-assigned. Click column headers to sort.</div>
     ${hasVendors ? `
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;padding:8px 10px;background:var(--panel);border:1px solid var(--border);border-radius:6px">
       <label style="font-size:11px;white-space:nowrap;color:var(--text2)">Bulk assign:</label>
@@ -328,12 +351,12 @@ function showUnresolvedDevices() {
     <div style="max-height:420px;overflow:auto">
       <table style="width:100%;font-size:11px;border-collapse:collapse;min-width:700px">
         <thead><tr>
-          <th style="text-align:left;padding:6px 8px;border-bottom:2px solid var(--border);white-space:nowrap">Project</th>
-          <th style="text-align:left;padding:6px 8px;border-bottom:2px solid var(--border);white-space:nowrap">Device</th>
-          <th style="text-align:left;padding:6px 8px;border-bottom:2px solid var(--border);white-space:nowrap">Type</th>
-          <th style="text-align:left;padding:6px 8px;border-bottom:2px solid var(--border);white-space:nowrap">MAC Address</th>
-          <th style="text-align:left;padding:6px 8px;border-bottom:2px solid var(--border);white-space:nowrap">IP</th>
-          <th style="text-align:left;padding:6px 8px;border-bottom:2px solid var(--border);white-space:nowrap;min-width:120px">Assign Vendor</th>
+          <th style="${thStyle}" onclick="_sortUnresolved('project')">Project${arrow('project')}</th>
+          <th style="${thStyle}" onclick="_sortUnresolved('device')">Device${arrow('device')}</th>
+          <th style="${thStyle}" onclick="_sortUnresolved('type')">Type${arrow('type')}</th>
+          <th style="${thStyle}" onclick="_sortUnresolved('mac')">MAC Address${arrow('mac')}</th>
+          <th style="${thStyle}" onclick="_sortUnresolved('ip')">IP${arrow('ip')}</th>
+          <th style="text-align:left;padding:6px 8px;border-bottom:2px solid var(--border);white-space:nowrap;min-width:120px;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--text3)">Assign Vendor</th>
           <th style="padding:6px 8px;border-bottom:2px solid var(--border);white-space:nowrap;width:70px"></th>
         </tr></thead>
         <tbody>
@@ -365,6 +388,7 @@ function saveUnresolvedVendors() {
   let count = 0;
   const vendorName = {};
   state.globalVendors.forEach(v => { vendorName[v.id] = v.name; });
+  const matchedOUIs = new Set();
   document.querySelectorAll('.unres-vendor').forEach(sel => {
     const vid = sel.value;
     if (!vid) return;
@@ -377,6 +401,15 @@ function saveUnresolvedVendors() {
     dev.vendorId = vid;
     if (vendorName[vid]) dev.manufacturer = vendorName[vid];
     count++;
+    // Track OUI for auto-matching other devices
+    const oui = _extractOUI(dev.mac);
+    if (oui && vendorName[vid]) {
+      const key = oui + '|' + vid;
+      if (!matchedOUIs.has(key)) {
+        matchedOUIs.add(key);
+        _autoMatchByOUI(vid, vendorName[vid], oui);
+      }
+    }
   });
   if (count > 0) save();
   closeModal();
