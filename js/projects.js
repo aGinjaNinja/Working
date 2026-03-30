@@ -6,12 +6,13 @@ function renderProjects() {
   state.projects.forEach(p => {
     const devCount = p.devices.length;
     const rackCount = p.racks.length;
+    const photoCount = (p.photos||[]).length;
     const div = document.createElement('div');
     div.className = 'proj-card';
     div.innerHTML = `
       <button class="pdel" title="Delete project" onclick="deleteProject('${p.id}', event)">✕</button>
       <div class="pname">${esc(p.name)}</div>
-      <div class="pmeta"><span>${devCount}</span> devices &nbsp;·&nbsp; <span>${rackCount}</span> racks</div>
+      <div class="pmeta"><span>${devCount}</span> devices &nbsp;·&nbsp; <span>${rackCount}</span> racks &nbsp;·&nbsp; <span>${photoCount}</span> photos</div>
       <div class="pmeta" style="margin-top:4px;color:var(--text3);">${p.created || 'Project'}</div>
     `;
     div.addEventListener('click', () => openProject(p.id));
