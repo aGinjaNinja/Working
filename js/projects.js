@@ -94,30 +94,27 @@ function renderProjects() {
       const grid = document.createElement('div');
       grid.className = 'proj-inner-grid';
       projects.forEach(p => grid.appendChild(_createProjectCard(p)));
-      grid.appendChild(_createNewProjectCard(folder.id));
       folderEl.appendChild(grid);
     }
 
     g.appendChild(folderEl);
   });
 
-  // ── Unfiled local projects ──
-  if (unfiled.length > 0 || !hasFolders) {
-    if (hasFolders) {
-      const header = document.createElement('div');
-      header.className = 'proj-folder-header';
-      header.innerHTML = `
-        <div class="proj-folder-name" style="color:var(--text2)">Unfiled Projects</div>
-        <div class="proj-folder-count">${unfiled.length}</div>
-      `;
-      g.appendChild(header);
-    }
-    const grid = document.createElement('div');
-    grid.className = 'proj-inner-grid';
-    unfiled.forEach(p => grid.appendChild(_createProjectCard(p)));
-    grid.appendChild(_createNewProjectCard(''));
-    g.appendChild(grid);
+  // ── Unfiled local projects (always shown — contains "+ New Project") ──
+  if (hasFolders) {
+    const header = document.createElement('div');
+    header.className = 'proj-folder-header';
+    header.innerHTML = `
+      <div class="proj-folder-name" style="color:var(--text2)">Unfiled Projects</div>
+      <div class="proj-folder-count">${unfiled.length}</div>
+    `;
+    g.appendChild(header);
   }
+  const unfiledGrid = document.createElement('div');
+  unfiledGrid.className = 'proj-inner-grid';
+  unfiled.forEach(p => unfiledGrid.appendChild(_createProjectCard(p)));
+  unfiledGrid.appendChild(_createNewProjectCard(''));
+  g.appendChild(unfiledGrid);
 
   // ── Drive-only projects ──
   const localNames = new Set(state.projects.map(p => p.name));
