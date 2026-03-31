@@ -284,10 +284,13 @@ function setSortCol(col) {
 function bulkToggleAll(checked) {
   const p = getProject();
   const filter = state.deviceFilter || 'all';
+  const statusFilter = state.deviceStatusFilter || 'all';
   const search = (state.deviceSearch || '').toLowerCase();
   const devs = p.devices.filter(d => {
+    if (d.deviceType === 'Patch Panel' || d.deviceType === 'Fiber Enclosure') return false;
     if (filter !== 'all' && d.deviceType !== filter) return false;
-    if (search && !d.name.toLowerCase().includes(search) && !(d.ip||'').includes(search)) return false;
+    if (statusFilter !== 'all' && (d.status||'') !== statusFilter) return false;
+    if (search && !d.name.toLowerCase().includes(search) && !(d.ip||'').includes(search) && !(d.model||'').toLowerCase().includes(search) && !(d.mac||'').toLowerCase().includes(search) && !(d.deviceType||'').toLowerCase().includes(search)) return false;
     return true;
   });
   if (checked) devs.forEach(d => state.selectedDeviceIds.add(d.id));
@@ -314,7 +317,7 @@ function _syncBulkBar() {
   const filter = state.deviceFilter || 'all';
   const search = (state.deviceSearch || '').toLowerCase();
   const devs = p.devices.filter(d => {
-    if (d.deviceType === 'Patch Panel') return false;
+    if (d.deviceType === 'Patch Panel' || d.deviceType === 'Fiber Enclosure') return false;
     if (filter !== 'all' && d.deviceType !== filter) return false;
     if (search && !d.name.toLowerCase().includes(search) &&
         !(d.ip||'').includes(search) && !(d.model||'').toLowerCase().includes(search) &&

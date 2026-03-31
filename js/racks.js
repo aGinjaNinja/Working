@@ -274,6 +274,13 @@ function onSlotDrop(e, rackId, u) {
   if (!dev) return;
   if (!RACK_MOUNTABLE.has(dev.deviceType||'Misc.')) return toast(`${dev.deviceType} devices cannot be rack-mounted`, 'error');
   const targetRack = p.racks.find(r => r.id === rackId);
+  // Check if device fits and doesn't overlap with other multi-U devices
+  const devUH = dev.deviceUHeight || 1;
+  if (targetRack && u + devUH - 1 > targetRack.uHeight) return toast(`${dev.name} (${devUH}U) doesn't fit at U${u} — rack is only ${targetRack.uHeight}U`, 'error');
+  for (let cu = u; cu < u + devUH; cu++) {
+    const blocker = p.devices.find(d => d.id !== deviceId && d.rackId === rackId && d.rackU && d.rackU <= cu && cu < d.rackU + (d.deviceUHeight||1));
+    if (blocker && blocker.rackU !== u) return toast(`U${cu} is occupied by ${blocker.name}`, 'error');
+  }
   const existing = p.devices.find(d => d.rackId === rackId && d.rackU === u && d.id !== deviceId);
   const oldRack = dev.rackId ? p.racks.find(r => r.id === dev.rackId) : null;
   const oldU = dev.rackU;
@@ -410,9 +417,12 @@ function saveDeviceToRack() {
   const { rackId, u } = _pendingRackAssign || {};
   if (!rackId) return;
   const p = getProject();
-  // Check slot is still free
-  if (p.devices.find(d => d.rackId === rackId && d.rackU === u)) {
-    return toast('That slot is already occupied', 'error');
+  // Check slot is still free and device fits
+  const targetRack = p.racks.find(r => r.id === rackId);
+  if (targetRack && u + uheight - 1 > targetRack.uHeight) return toast(`${uheight}U device doesn't fit at U${u} — rack is only ${targetRack.uHeight}U`, 'error');
+  for (let cu = u; cu < u + uheight; cu++) {
+    const blocker = p.devices.find(d => d.rackId === rackId && d.rackU && d.rackU <= cu && cu < d.rackU + (d.deviceUHeight||1));
+    if (blocker) return toast(`U${cu} is occupied by ${blocker.name}`, 'error');
   }
   const dev = {
     id: genId(), name, deviceType: type,
