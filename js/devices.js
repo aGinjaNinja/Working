@@ -5,14 +5,16 @@ function renderDevices(preserveSearch) {
   setTopbarActions(`
     <button class="btn btn-ghost btn-sm" onclick="lookupMacManufacturers()" title="Look up missing manufacturers via MAC address">⊙ Lookup Manufacturers</button>
     <button class="btn btn-ghost btn-sm" onclick="addPatchPanel()">⊞ New Patch Panel</button>
+    <button class="btn btn-ghost btn-sm" onclick="addFiberEnclosure()">⬡ New Fiber Enclosure</button>
     <button class="btn btn-primary btn-sm" onclick="addDevice()">+ Add Device</button>`);
   const p = getProject();
   const filter = state.deviceFilter || 'all';
   const search = (state.deviceSearch || '').toLowerCase();
 
-  // ── Split patch panels out of the main device list ──
-  const allNonPP = p.devices.filter(d => d.deviceType !== 'Patch Panel');
+  // ── Split patch panels and fiber enclosures out of the main device list ──
+  const allNonPP = p.devices.filter(d => d.deviceType !== 'Patch Panel' && d.deviceType !== 'Fiber Enclosure');
   const allPP    = p.devices.filter(d => d.deviceType === 'Patch Panel');
+  const allFE    = p.devices.filter(d => d.deviceType === 'Fiber Enclosure');
 
   const statusFilter = state.deviceStatusFilter || 'all';
   let devs = allNonPP.filter(d => {
@@ -92,6 +94,7 @@ function renderDevices(preserveSearch) {
 
   // ── Patch Panels section ──
   const ppSearched = allPP.filter(d => !search || d.name.toLowerCase().includes(search) || (d.model||'').toLowerCase().includes(search));
+  const feSearched = allFE.filter(d => !search || d.name.toLowerCase().includes(search) || (d.model||'').toLowerCase().includes(search));
   const ppSectionHtml = `
     <div style="margin-top:28px">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
@@ -135,6 +138,51 @@ function renderDevices(preserveSearch) {
                   </td>
                   <td>${rack?`<span class="badge badge-green">${esc(rack.name)}</span>`:'<span class="badge badge-gray">Unassigned</span>'}</td>
                   <td style="color:var(--text2);font-size:12px">${esc(d.model||'')}${d.notes?` <span style="color:var(--text3)">· ${esc(d.notes)}</span>`:''}</td>
+                  <td><div class="td-actions">
+                    <button class="btn btn-ghost btn-sm btn-icon" title="Edit" onclick="editDevice('${d.id}')">✎</button>
+                    <button class="btn btn-danger btn-sm btn-icon" title="Delete" onclick="deleteDevice('${d.id}')">✕</button>
+                  </div></td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>`}
+    </div>`;
+
+  // ── Fiber Enclosures section ──
+  const feSectionHtml = `
+    <div style="margin-top:28px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:13px;font-weight:700;color:${dtColor('Fiber Enclosure')};text-transform:uppercase;letter-spacing:1px">⬡ Fiber Enclosures</span>
+          <span style="font-size:11px;color:var(--text3);font-family:var(--mono)">${allFE.length} enclosure${allFE.length!==1?'s':''}</span>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="addFiberEnclosure()">+ New Fiber Enclosure</button>
+      </div>
+      ${allFE.length === 0
+        ? `<div style="color:var(--text3);font-size:12px;padding:12px 0">No fiber enclosures yet. Click <strong>New Fiber Enclosure</strong> to add one.</div>`
+        : `<div class="devices-table-scroll">
+          <table id="fe-table">
+            <thead><tr>
+              <th style="width:44px"></th>
+              <th>Name</th>
+              <th>Pairs</th>
+              <th>U Height</th>
+              <th>Rack</th>
+              <th>Model / Notes</th>
+              <th></th>
+            </tr></thead>
+            <tbody>
+              ${feSearched.map(d => {
+                const rack = p.racks.find(r => r.id === d.rackId);
+                const c = dtColor('Fiber Enclosure');
+                return `<tr>
+                  <td style="text-align:center"><span style="font-size:16px">⬡</span></td>
+                  <td style="font-weight:600;color:${c}">${esc(d.name)}</td>
+                  <td><span class="mono">${d.fiberPairs || '—'}</span> pair</td>
+                  <td><span class="mono">${d.deviceUHeight || 1}U</span></td>
+                  <td>${rack?`<span class="badge badge-green">${esc(rack.name)}</span>`:'<span class="badge badge-gray">Unassigned</span>'}</td>
+                  <td style="color:var(--text2);font-size:12px">${esc(d.manufacturer||'')}${d.manufacturer&&d.model?' ':''}${esc(d.model||'')}${d.notes?` <span style="color:var(--text3)">· ${esc(d.notes)}</span>`:''}</td>
                   <td><div class="td-actions">
                     <button class="btn btn-ghost btn-sm btn-icon" title="Edit" onclick="editDevice('${d.id}')">✎</button>
                     <button class="btn btn-danger btn-sm btn-icon" title="Delete" onclick="deleteDevice('${d.id}')">✕</button>
@@ -206,7 +254,8 @@ function renderDevices(preserveSearch) {
         </tbody>
       </table>
     </div>`}
-    ${ppSectionHtml}`;
+    ${ppSectionHtml}
+    ${feSectionHtml}`;
 
   if (preserveSearch) {
     const inp = document.getElementById('device-search-input');
@@ -543,6 +592,100 @@ function savePatchPanel() {
   logChange(`Patch Panel added: ${name} (${ports} ports)`);
   save(); closeModal(); renderDevices(); toast(`Patch panel "${name}" created`, 'success');
 }
+function addFiberEnclosure() {
+  openFiberEnclosureModal(null);
+}
+function openFiberEnclosureModal(id) {
+  const p = getProject();
+  const d = id ? p.devices.find(x => x.id === id) : null;
+  const isNew = !d;
+  const curPairs = d?.fiberPairs || 6;
+  const curU = d?.deviceUHeight || 1;
+  const pairOpts = [6,12,18,24,30,36,42,48,54,60,66,72].map(n =>
+    `<option value="${n}" ${curPairs===n?'selected':''}>${n} pair</option>`
+  ).join('');
+  // >18 pair must be 4U; <=18 pair can be 1-4U
+  const uOpts = curPairs > 18
+    ? `<option value="4" selected>4U</option>`
+    : [1,2,3,4].map(u => `<option value="${u}" ${curU===u?'selected':''}>${u}U</option>`).join('');
+  openModal(`
+    <h3>${isNew ? 'Add Fiber Enclosure' : 'Edit Fiber Enclosure'}</h3>
+    <div class="form-row"><label>Enclosure Name</label>
+      <input class="form-control" id="fe-name" value="${esc(d?.name||'')}" placeholder="e.g. FE-01, MDF Fiber" autofocus></div>
+    <div class="form-row-inline">
+      <div class="form-row"><label>Fiber Pairs</label>
+        <select class="form-control" id="fe-pairs" onchange="onFiberPairsChange()">
+          ${pairOpts}
+        </select>
+      </div>
+      <div class="form-row"><label>U Height</label>
+        <select class="form-control" id="fe-uheight">
+          ${uOpts}
+        </select>
+      </div>
+    </div>
+    <div id="fe-uheight-note" style="font-size:10px;color:var(--amber);margin:-6px 0 10px;display:${curPairs>18?'block':'none'}">More than 18 pair requires 4U height.</div>
+    <div class="form-row-inline">
+      <div class="form-row"><label>Manufacturer <span style="color:var(--text3);font-weight:400">(opt.)</span></label>
+        <input class="form-control" id="fe-mfr" value="${esc(d?.manufacturer||'')}" placeholder="Corning, CommScope, etc."></div>
+      <div class="form-row"><label>Model <span style="color:var(--text3);font-weight:400">(opt.)</span></label>
+        <input class="form-control" id="fe-model" value="${esc(d?.model||'')}" placeholder="e.g. CCH-012"></div>
+    </div>
+    <div class="form-row"><label>Notes <span style="color:var(--text3);font-weight:400">(optional)</span></label>
+      <textarea class="form-control" id="fe-notes" rows="2" placeholder="e.g. SM fiber from demarc" style="resize:vertical;font-family:inherit">${esc(d?.notes||'')}</textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="saveFiberEnclosure('${id||''}')">${isNew ? 'Create Enclosure' : 'Save'}</button>
+    </div>`);
+  setTimeout(() => document.getElementById('fe-name')?.focus(), 50);
+}
+
+function onFiberPairsChange() {
+  const pairs = parseInt(document.getElementById('fe-pairs')?.value) || 6;
+  const sel = document.getElementById('fe-uheight');
+  const note = document.getElementById('fe-uheight-note');
+  if (!sel) return;
+  if (pairs > 18) {
+    sel.innerHTML = '<option value="4" selected>4U</option>';
+    if (note) note.style.display = 'block';
+  } else {
+    const curU = parseInt(sel.value) || 1;
+    const validU = curU > 4 ? 1 : curU;
+    sel.innerHTML = [1,2,3,4].map(u => `<option value="${u}" ${validU===u?'selected':''}>${u}U</option>`).join('');
+    if (note) note.style.display = 'none';
+  }
+}
+
+function saveFiberEnclosure(id) {
+  const p = getProject();
+  const name = document.getElementById('fe-name')?.value?.trim();
+  if (!name) return toast('Enter an enclosure name', 'error');
+  const fiberPairs = parseInt(document.getElementById('fe-pairs')?.value) || 6;
+  const deviceUHeight = parseInt(document.getElementById('fe-uheight')?.value) || (fiberPairs > 18 ? 4 : 1);
+  const manufacturer = document.getElementById('fe-mfr')?.value?.trim() || '';
+  const model = document.getElementById('fe-model')?.value?.trim() || '';
+  const notes = document.getElementById('fe-notes')?.value?.trim() || '';
+  if (id) {
+    const d = p.devices.find(x => x.id === id);
+    if (d) {
+      Object.assign(d, { name, fiberPairs, deviceUHeight, manufacturer, model, notes });
+      logChange(`Fiber Enclosure updated: ${name} (${fiberPairs} pair, ${deviceUHeight}U)`);
+    }
+  } else {
+    const dev = {
+      id: genId(), name, deviceType: 'Fiber Enclosure',
+      type: 'non-switching', ip: '', mac: '', manufacturer, model, notes,
+      ports: 0, fiberPairs, deviceUHeight,
+      rackId: null, rackU: null,
+      portAssignments: {}, portNotes: {}, portVlans: {}, portPeerPort: {}, portPoe: {}, portLabels: {},
+      addedDate: new Date().toISOString()
+    };
+    p.devices.push(dev);
+    logChange(`Fiber Enclosure added: ${name} (${fiberPairs} pair, ${deviceUHeight}U)`);
+  }
+  save(); closeModal(); renderDevices(); toast(`Fiber enclosure "${name}" ${id ? 'updated' : 'created'}`, 'success');
+}
+
 function editDevice(id) { openDeviceModal(id); }
 
 // ═══════════════════════════════════════════
@@ -656,8 +799,9 @@ function commitImportReview() {
 function openDeviceModal(id) {
   const p = getProject();
   const d = id ? p.devices.find(x => x.id === id) : null;
-  // Patch panels get their own dedicated editor
+  // Patch panels and fiber enclosures get their own dedicated editors
   if (d?.deviceType === 'Patch Panel') { openPatchPanelModal(id); return; }
+  if (d?.deviceType === 'Fiber Enclosure') { openFiberEnclosureModal(id); return; }
   const isNew = !d;
   const curType = d?.deviceType || 'Misc.';
   const showPorts = PORT_CAPABLE.has(curType);

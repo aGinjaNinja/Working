@@ -279,6 +279,14 @@ const DEVICE_TEMPLATES = [
     { label: 'Keystone 24-port', isPP: true, ports: 24, ppType: 'Keystone', namePlaceholder: 'PP-01' },
     { label: 'Keystone 48-port', isPP: true, ports: 48, ppType: 'Keystone', namePlaceholder: 'PP-01' },
   ]},
+  { category: 'Fiber Enclosure', icon: '⬡', items: [
+    { label: '6 pair 1U', isFE: true, fiberPairs: 6, deviceUHeight: 1, namePlaceholder: 'FE-01' },
+    { label: '12 pair 1U', isFE: true, fiberPairs: 12, deviceUHeight: 1, namePlaceholder: 'FE-01' },
+    { label: '18 pair 2U', isFE: true, fiberPairs: 18, deviceUHeight: 2, namePlaceholder: 'FE-01' },
+    { label: '24 pair 4U', isFE: true, fiberPairs: 24, deviceUHeight: 4, namePlaceholder: 'FE-01' },
+    { label: '48 pair 4U', isFE: true, fiberPairs: 48, deviceUHeight: 4, namePlaceholder: 'FE-01' },
+    { label: '72 pair 4U', isFE: true, fiberPairs: 72, deviceUHeight: 4, namePlaceholder: 'FE-01' },
+  ]},
   { category: 'Router', icon: '⇌', items: [
     { label: 'Router 1U', deviceType: 'Router', ports: 4, deviceUHeight: 1, namePlaceholder: 'RTR-01' },
     { label: 'Router 2U', deviceType: 'Router', ports: 8, deviceUHeight: 2, namePlaceholder: 'RTR-01' },
@@ -431,9 +439,9 @@ function quickAddDevice(tplOrIdx) {
   const tpl = (typeof tplOrIdx === 'number') ? flat[tplOrIdx] : tplOrIdx;
   if (!tpl) return;
   _quickTpl = tpl;
-  const portLine = tpl.ports ? ` · ${tpl.ports} ports` : '';
+  const portLine = tpl.isFE ? ` · ${tpl.fiberPairs} pair` : tpl.ports ? ` · ${tpl.ports} ports` : '';
   const uLine = tpl.deviceUHeight > 1 ? ` · ${tpl.deviceUHeight}U` : '';
-  const typeLabel = tpl.isPP ? `Patch Panel (${tpl.ppType || ''})` : tpl.deviceType;
+  const typeLabel = tpl.isPP ? `Patch Panel (${tpl.ppType || ''})` : tpl.isFE ? 'Fiber Enclosure' : tpl.deviceType;
   openModal(`
     <h3>Quick Add: ${esc(tpl.label)}</h3>
     <p style="font-size:11px;color:var(--text3);margin:-4px 0 14px;font-family:var(--mono)">${esc(typeLabel)}${portLine}${uLine}</p>
@@ -441,7 +449,7 @@ function quickAddDevice(tplOrIdx) {
       <label>Device Name *</label>
       <input class="form-control" id="qt-name" placeholder="${esc(tpl.namePlaceholder || 'Device name')}" autofocus>
     </div>
-    ${tpl.isPP ? '' : `<div class="form-row-inline">
+    ${(tpl.isPP || tpl.isFE) ? '' : `<div class="form-row-inline">
       <div class="form-row"><label>Manufacturer <span style="color:var(--text3);font-weight:400">(opt.)</span></label>
         <input class="form-control" id="qt-mfr" value="${esc(tpl.manufacturer||'')}" placeholder="Cisco, HP, etc."></div>
       <div class="form-row"><label>Model <span style="color:var(--text3);font-weight:400">(opt.)</span></label>
@@ -474,6 +482,17 @@ function saveQuickDevice() {
       notes: '', ports: tpl.ports || 24,
       deviceUHeight: 1, rackId: null, rackU: null,
       portAssignments: {}, portNotes: {}, portVlans: {}, portPeerPort: {}, portPoe: {}, portLabels: {}
+    };
+  } else if (tpl.isFE) {
+    dev = {
+      id: genId(), name,
+      deviceType: 'Fiber Enclosure',
+      type: 'non-switching',
+      ip: '', mac: '', manufacturer: '', model: '',
+      notes: '', ports: 0, fiberPairs: tpl.fiberPairs || 6,
+      deviceUHeight: tpl.deviceUHeight || 1, rackId: null, rackU: null,
+      portAssignments: {}, portNotes: {}, portVlans: {}, portPeerPort: {}, portPoe: {}, portLabels: {},
+      addedDate: new Date().toISOString()
     };
   } else {
     const mfr = document.getElementById('qt-mfr')?.value?.trim() || '';

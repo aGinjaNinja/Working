@@ -5,14 +5,14 @@
 const LOGO_URI = "img/logo.jpg";
 
 const DEVICE_TYPES = [
-  'Modem','Router','Firewall','Switch','Patch Panel','AP','Server',
+  'Modem','Router','Firewall','Switch','Patch Panel','Fiber Enclosure','AP','Server',
   'PC/Workstation','IP Phone','IP Camera','Access Control',
   'NAS','IoT Device','Printer','Fax Machine',
   'Smartphone/Tablet','APC/UPS','Misc.','Misc Rack-Mounted'
 ];
 
 const RACK_MOUNTABLE = new Set([
-  'Modem','Router','Firewall','Switch','Patch Panel','Server','NAS','Access Control','APC/UPS','Misc Rack-Mounted'
+  'Modem','Router','Firewall','Switch','Patch Panel','Fiber Enclosure','Server','NAS','Access Control','APC/UPS','Misc Rack-Mounted'
 ]);
 
 const PORT_CAPABLE = new Set([
@@ -25,6 +25,7 @@ const DEFAULT_TYPE_COLORS = {
   'Firewall':        '#ff4455',
   'Switch':          '#00e87a',
   'Patch Panel':     '#e8a020',
+  'Fiber Enclosure': '#ff44cc',
   'AP':              '#aa44ff',
   'Server':          '#4488ff',
   'PC/Workstation':  '#ffcc00',
@@ -85,6 +86,7 @@ function migrateDevice(d) {
   if (d.eolDate === undefined) d.eolDate = '';
   if (!d.addedDate) d.addedDate = '';
   if (d.vendorId === undefined) d.vendorId = '';
+  if (d.fiberPairs === undefined) d.fiberPairs = 0;
   return d;
 }
 
