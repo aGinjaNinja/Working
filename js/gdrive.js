@@ -220,25 +220,60 @@ function _projectDescription(p) {
   return JSON.stringify({ devices: (p.devices||[]).length, racks: (p.racks||[]).length, photos: (p.photos||[]).length, folderId: p.folderId || '' });
 }
 
+function _driveProgressModal(title, detail) {
+  openModal(`
+    <h3 style="margin-bottom:12px">${title}</h3>
+    <p id="gdrive-prog-detail" style="font-size:13px;color:var(--text2);margin-bottom:10px">${detail}</p>
+    <div style="background:var(--card2);border:1px solid var(--border2);border-radius:6px;height:22px;overflow:hidden">
+      <div id="gdrive-prog-bar" style="height:100%;width:0%;background:var(--accent);border-radius:6px;transition:width .3s ease"></div>
+    </div>
+    <p id="gdrive-prog-pct" style="text-align:center;font-size:12px;color:var(--text3);margin-top:6px;font-family:var(--mono)">0%</p>
+  `);
+}
+
+function _driveProgressUpdate(pct, detail) {
+  const bar = document.getElementById('gdrive-prog-bar');
+  const pctEl = document.getElementById('gdrive-prog-pct');
+  const detailEl = document.getElementById('gdrive-prog-detail');
+  if (bar) bar.style.width = pct + '%';
+  if (pctEl) pctEl.textContent = Math.round(pct) + '%';
+  if (detail && detailEl) detailEl.textContent = detail;
+}
+
+function _driveDoneModal(title, message, type) {
+  const icon = type === 'error' ? '⚠' : '☁';
+  const color = type === 'error' ? '#e74c3c' : 'var(--accent)';
+  openModal(`
+    <h3 style="margin-bottom:12px">${icon} ${title}</h3>
+    <p style="font-size:13px;color:var(--text2);margin-bottom:18px">${message}</p>
+    <div class="modal-actions">
+      <button class="btn btn-primary" onclick="closeModal()" style="min-width:100px;border-color:${color};background:${color}">Okay</button>
+    </div>
+  `);
+}
+
 async function gdriveSave() {
   const p = getProject();
   if (!p) return toast('No project open', 'error');
   _driveAuth(async () => {
+    _driveProgressModal('☁ Saving to Google Drive', `Uploading "${esc(p.name)}"…`);
     try {
       const folderId = await _getOrCreateDriveFolder();
+      _driveProgressUpdate(15);
       const fileName = p.name.replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_') + '_netrack.json';
       const content  = JSON.stringify({ _netrack_version: 2, typeColors: state.typeColors || {}, globalVendors: state.globalVendors || [], project: p }, null, 2);
       const desc = _projectDescription(p);
       const q = encodeURIComponent(`name='${fileName}' and '${folderId}' in parents and trashed=false`);
       const search = await _driveFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)`);
       const { files } = await search.json();
+      _driveProgressUpdate(35);
       if (files?.length) {
         await _driveFetch(`https://www.googleapis.com/upload/drive/v3/files/${files[0].id}?uploadType=media`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: content
         });
-        // Update description with counts
+        _driveProgressUpdate(65);
         await _driveFetch(`https://www.googleapis.com/drive/v3/files/${files[0].id}`, {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
@@ -253,24 +288,34 @@ async function gdriveSave() {
           headers: { 'Content-Type': `multipart/related; boundary=${boundary}` },
           body
         });
+        _driveProgressUpdate(65);
       }
+      _driveProgressUpdate(80, 'Saving manufacturers & folders…');
       await _gdriveSaveManufacturers(folderId);
+      _driveProgressUpdate(90);
       await _gdriveSaveFolders(folderId);
+      _driveProgressUpdate(100);
       logChange('Project saved to Google Drive');
       save();
-      toast(`☁ Saved "${p.name}" to Google Drive`, 'success');
-    } catch (err) { toast('Drive save failed: ' + err.message, 'error'); }
+      _driveDoneModal('Save Complete', `"${esc(p.name)}" has been saved to Google Drive.`);
+    } catch (err) {
+      _driveDoneModal('Save Failed', 'Error: ' + esc(err.message), 'error');
+    }
   });
 }
 
 async function gdriveSaveAll() {
   if (!state.projects.length) return toast('No projects to save', 'error');
   _driveAuth(async () => {
+    const total = state.projects.length;
+    _driveProgressModal('☁ Saving All to Google Drive', `Preparing to save ${total} project${total !== 1 ? 's' : ''}…`);
     try {
       const folderId = await _getOrCreateDriveFolder();
       let saved = 0, failed = 0;
-      toast(`☁ Saving ${state.projects.length} project${state.projects.length !== 1 ? 's' : ''} to Drive…`);
-      for (const p of state.projects) {
+      _driveProgressUpdate(5);
+      for (let i = 0; i < state.projects.length; i++) {
+        const p = state.projects[i];
+        _driveProgressUpdate(5 + (i / total) * 80, `Saving "${esc(p.name)}" (${i + 1} of ${total})…`);
         try {
           const fileName = p.name.replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '_') + '_netrack.json';
           const content = JSON.stringify({ _netrack_version: 2, typeColors: state.typeColors || {}, globalVendors: state.globalVendors || [], project: p }, null, 2);
@@ -296,12 +341,18 @@ async function gdriveSaveAll() {
           saved++;
         } catch (err) { failed++; }
       }
+      _driveProgressUpdate(90, 'Saving manufacturers & folders…');
       await _gdriveSaveManufacturers(folderId);
+      _driveProgressUpdate(95);
       await _gdriveSaveFolders(folderId);
-      const parts = [`${saved} saved`];
-      if (failed) parts.push(`${failed} failed`);
-      toast(`☁ ${parts.join(', ')}`, saved > 0 ? 'success' : 'error');
-    } catch (err) { toast('Drive save failed: ' + err.message, 'error'); }
+      _driveProgressUpdate(100);
+      const msg = failed
+        ? `${saved} project${saved !== 1 ? 's' : ''} saved, ${failed} failed.`
+        : `All ${saved} project${saved !== 1 ? 's' : ''} saved successfully.`;
+      _driveDoneModal('Save Complete', msg, failed && !saved ? 'error' : undefined);
+    } catch (err) {
+      _driveDoneModal('Save Failed', 'Error: ' + esc(err.message), 'error');
+    }
   });
 }
 
