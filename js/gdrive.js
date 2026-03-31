@@ -442,10 +442,12 @@ async function openDriveProject(driveFileId) {
     _driveAuth(() => openDriveProject(driveFileId));
     return;
   }
+  _driveProgressModal('☁ Downloading Project', 'Fetching project from Google Drive…');
   try {
-    toast('☁ Downloading project…');
+    _driveProgressUpdate(10);
     const r = await _driveFetch(`https://www.googleapis.com/drive/v3/files/${driveFileId}?alt=media`);
     const text = await r.text();
+    _driveProgressUpdate(40, 'Processing project data…');
     let p = null, importedColors = null, importedVendors = null;
     const parsed = JSON.parse(text);
     if (parsed._netrack_version === 2 && parsed.project) {
@@ -455,6 +457,7 @@ async function openDriveProject(driveFileId) {
     } else { throw new Error('Unrecognised file format'); }
     if (!p.id || !p.name) throw new Error('Missing project id or name');
     migrateProject(p);
+    _driveProgressUpdate(55, 'Saving to local storage…');
     await _idbSaveProject(p);
     const existing = state.projects.findIndex(x => x.id === p.id);
     if (existing >= 0) { state.projects[existing] = p; }
@@ -468,28 +471,34 @@ async function openDriveProject(driveFileId) {
       importedVendors.forEach(v => { const k=(v.name||'').toLowerCase(); if(k&&!existingNames.has(k)){state.globalVendors.push({...v});existingNames.add(k);} });
       saveGlobalVendors();
     }
-    // Load manufacturer list and folders from Drive
+    _driveProgressUpdate(70, 'Syncing manufacturers & folders…');
     try {
       const folderId = await _getOrCreateDriveFolder();
       const mfrMatched = await _gdriveLoadManufacturers(folderId);
       if (mfrMatched > 0) toast(`☁ Auto-matched ${mfrMatched} device${mfrMatched!==1?'s':''} from manufacturer list`, 'success');
       await _gdriveLoadFolders(folderId);
     } catch(e) { /* non-fatal */ }
+    _driveProgressUpdate(90);
     // Remove from drive index — it's now a local project
     state.driveIndex = state.driveIndex.filter(e => e.driveFileId !== driveFileId);
     _idbSaveConfig('driveIndex', state.driveIndex).catch(() => {});
+    _driveProgressUpdate(100, 'Opening project…');
     state.currentProjectId = p.id;
     sessionStorage.setItem('netrack_current_project', p.id);
     try { localStorage.setItem('netrack_current_project', p.id); } catch(e) {}
     window.location.href = 'dashboard.html';
-  } catch (err) { toast('Failed to load: ' + err.message, 'error'); }
+  } catch (err) {
+    _driveDoneModal('Download Failed', 'Error: ' + esc(err.message), 'error');
+  }
 }
 
 async function gdriveImportFile(fileId, fileName) {
+  _driveProgressModal('☁ Downloading Project', 'Fetching project from Google Drive…');
   try {
-    toast('☁ Downloading project…');
+    _driveProgressUpdate(10);
     const r = await _driveFetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`);
     const text = await r.text();
+    _driveProgressUpdate(40, 'Processing project data…');
     let p = null, importedColors = null, importedVendors = null;
     const parsed = JSON.parse(text);
     if (parsed._netrack_version === 2 && parsed.project) {
@@ -499,9 +508,8 @@ async function gdriveImportFile(fileId, fileName) {
     } else { throw new Error('Unrecognised file format'); }
     if (!p.id || !p.name) throw new Error('Missing project id or name');
     migrateProject(p);
-    // Save directly to IndexedDB (no localStorage quota issues)
+    _driveProgressUpdate(55, 'Saving to local storage…');
     await _idbSaveProject(p);
-    // Update in-memory state
     const existing = state.projects.findIndex(x => x.id === p.id);
     if (existing >= 0) { state.projects[existing] = p; }
     else { state.projects.push(p); }
@@ -514,18 +522,21 @@ async function gdriveImportFile(fileId, fileName) {
       importedVendors.forEach(v => { const k=(v.name||'').toLowerCase(); if(k&&!existingNames.has(k)){state.globalVendors.push({...v});existingNames.add(k);} });
       saveGlobalVendors();
     }
-    // Load manufacturer list and folders from Drive
+    _driveProgressUpdate(70, 'Syncing manufacturers & folders…');
     try {
       const folderId = await _getOrCreateDriveFolder();
       const mfrMatched = await _gdriveLoadManufacturers(folderId);
       if (mfrMatched > 0) toast(`☁ Auto-matched ${mfrMatched} device${mfrMatched!==1?'s':''} from manufacturer list`, 'success');
       await _gdriveLoadFolders(folderId);
     } catch(e) { /* non-fatal */ }
+    _driveProgressUpdate(90);
     save();
-    closeModal();
+    _driveProgressUpdate(100, 'Opening project…');
     state.currentProjectId = p.id;
     sessionStorage.setItem('netrack_current_project', p.id);
     try { localStorage.setItem('netrack_current_project', p.id); } catch(e) {}
     window.location.href = 'dashboard.html';
-  } catch (err) { toast('Failed to load file: ' + err.message, 'error'); }
+  } catch (err) {
+    _driveDoneModal('Download Failed', 'Error: ' + esc(err.message), 'error');
+  }
 }
