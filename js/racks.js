@@ -300,22 +300,15 @@ function rackPortHover(el, e) {
 
   el.classList.add('port-hl');
 
-  if (devId && ownerId) {
-    // Highlight all ports on other devices that connect to the same target
-    document.querySelectorAll(`[data-devid="${devId}"]`)
-      .forEach(p => { if (p !== el) p.classList.add('port-hl'); });
-
-    // Highlight the specific peer port on the connected device (bidirectional glow)
-    if (portIdx && ownerId) {
-      const p = getProject();
-      const ownerDev = p.devices.find(d => d.id === ownerId);
-      if (ownerDev) {
-        const peerPortNum = (ownerDev.portPeerPort || {})[portIdx];
-        if (peerPortNum) {
-          // Find the port element on the connected device with that port index
-          const peerEl = document.querySelector(`[data-owner-id="${devId}"][data-portidx="${peerPortNum}"]`);
-          if (peerEl) peerEl.classList.add('port-hl');
-        }
+  if (devId && ownerId && portIdx) {
+    // Highlight only the specific peer port on the connected device
+    const proj = getProject();
+    const ownerDev = proj.devices.find(d => d.id === ownerId);
+    if (ownerDev) {
+      const peerPortNum = (ownerDev.portPeerPort || {})[portIdx];
+      if (peerPortNum) {
+        const peerEl = document.querySelector(`[data-owner-id="${devId}"][data-portidx="${peerPortNum}"]`);
+        if (peerEl) peerEl.classList.add('port-hl');
       }
     }
   }
